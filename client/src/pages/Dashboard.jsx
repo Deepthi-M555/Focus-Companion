@@ -1,7 +1,21 @@
 import { useEffect, useState } from "react";
+import { getTasks } from "../api/taskApi";
 
 function Dashboard() {
   const [tasks, setTasks] = useState([]);
+
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        const data = await getTasks();
+        setTasks(data);
+      } catch (error) {
+        console.error(error.message);
+      }
+    };
+
+    fetchTasks();
+  }, []);
 
   return (
     <div>
