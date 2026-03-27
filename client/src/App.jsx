@@ -1,25 +1,14 @@
 import LoginPage from "./pages/LoginPage";
+import Dashboard from "./pages/Dashboard";
 
 function App() {
   const token = localStorage.getItem("token");
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    window.location.reload();
-  };
-
   return (
     <div>
-      {token ? (
-        <>
-          <h1>Dashboard</h1>
-          <button onClick={handleLogout}>Logout</button>
-        </>
-      ) : (
-        <LoginPage />
-      )}
+      {token ? <Dashboard /> : <LoginPage />}
     </div>
   );
 }
 
-export default App;
+export default App;whta
