@@ -16,6 +16,9 @@ function LoginPage() {
 
       alert("Login successful");
 
+      // 🔥 IMPORTANT FIX
+      window.location.reload();
+
     } catch (error) {
       alert(error.message);
     }
