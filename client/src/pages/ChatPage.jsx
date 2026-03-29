@@ -1,15 +1,37 @@
 import { useState } from "react";
+import { parseInput } from "../engine/parser";
+import Timetable from "../components/Timetable";
+import { generateSchedule } from "../engine/Scheduler";
 
 function ChatPage() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
 
+  const [schedule, setSchedule] = useState([]);
+
   const handleSend = () => {
-    if (!input) return;
+    if (!input.trim()) return;
 
     const userMessage = { type: "user", text: input };
 
-    setMessages((prev) => [...prev, userMessage]);
+    const parsed = parseInput(input);
+
+    const [schedule, setSchedule] = useState([]);
+
+    let aiText = "";
+
+    if (parsed.tasks.length === 0) {
+      aiText = `You have ${parsed.hours} hours. Please tell me what subjects you want to study.`;
+    } else {
+      aiText = `You have ${parsed.hours} hours for ${parsed.tasks.join(", ")}`;
+    }
+
+    const aiMessage = {
+      type: "ai",
+      text: aiText,
+    };
+
+    setMessages((prev) => [...prev, userMessage, aiMessage]);
 
     setInput("");
   };
@@ -34,6 +56,9 @@ function ChatPage() {
       />
 
       <button onClick={handleSend}>Send</button>
+
+      {/* 🔥 Timetable UI */}
+      <Timetable schedule={schedule} />
     </div>
   );
 }
