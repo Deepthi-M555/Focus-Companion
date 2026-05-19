@@ -1,12 +1,33 @@
 const express = require("express");
-const router = express.Router();
-const wrapAsync = require("../utils/wrapAsync");
-const { isLoggedIn } = require("../middleware/authMiddleware");
-const taskController = require("../controllers/taskController");
 
-router.post("/", isLoggedIn, wrapAsync(taskController.createTask));
-router.get("/", isLoggedIn, wrapAsync(taskController.getTasks));
-router.delete("/:id", isLoggedIn, wrapAsync(taskController.deleteTask));
-router.put("/:id", isLoggedIn, wrapAsync(taskController.updateTask));
+const router = express.Router();
+
+const {
+  createTask
+} = require("../controllers/taskController");
+
+const {
+  isLoggedIn
+} = require("../middleware/authMiddleware");
+
+const wrapAsync =
+require("../utils/wrapAsync");
+
+router.post(
+  "/",
+  isLoggedIn,
+  wrapAsync(createTask)
+);
 
 module.exports = router;
+
+
+
+// WHAT IS HAPPENING HERE?
+// Request
+// ↓
+// JWT middleware
+// ↓
+// Authenticated user injected
+// ↓
+// Task controller executes
