@@ -37,9 +37,23 @@ module.exports.login = async (req, res, next) => {
   }
 
   const user = await User.findOne({ email });
+
+  const dummyHash = "$2b$10$KbQiN6tL2v1x5n6m8n2zUeK7V6kGQz5u5X7gYJz7Kx7WJfV1dY9mG";
+
   if (!user) {
-    throw new ExpressError(400, "Invalid credentials");
+
+    await bcrypt.compare(
+      password,
+      dummyHash
+    );
+
+    throw new ExpressError(
+      401,
+      "Invalid credentials"
+    );
+
   }
+  //WHAT IS HAPPENING? Even if user missing: backend still performs bcrypt work. Now: timing becomes consistent. Professional auth hardening.
 
   const isMatch = await bcrypt.compare(password, user.passwordHash);
   if (!isMatch) {
@@ -57,7 +71,11 @@ module.exports.login = async (req, res, next) => {
 
   res.status(200).json({
     message: "Login successful",
-    token
-  });
-  
+    token,
+
+    user: {
+    id: user._id,
+    email: user.email
+  }
+});
 };
