@@ -1,0 +1,25 @@
+{
+  "name": "companion",
+  "version": "1.0.0",
+  
+  "description": "A full-stack desktop productivity application designed to help users stay focused, manage tasks, and improve productivity through structured scheduling and focus sessions.",
+  "main": "electron/main.js",
+  "scripts": {
+    "electron": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Deepthi-M555/Focus-Companion-.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Deepthi-M555/Focus-Companion-/issues"
+  },
+  "homepage": "https://github.com/Deepthi-M555/Focus-Companion-#readme",
+  "devDependencies": {
+    "electron": "^42.1.0"
+  }
+}
