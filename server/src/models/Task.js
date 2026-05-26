@@ -1,9 +1,9 @@
-const mongoose = require("mongoose");
+const mongoose =require("mongoose");
 
-const taskSchema = new mongoose.Schema({
-
-  user: {
-    type: mongoose.Schema.Types.ObjectId,
+const taskSchema =new mongoose.Schema({
+  userId: {
+    type:
+      mongoose.Schema.Types.ObjectId,
     ref: "User",
     required: true
   },
@@ -19,87 +19,74 @@ const taskSchema = new mongoose.Schema({
     default: ""
   },
 
-  priority: {
-    type: String,
-    enum: ["low", "medium", "high"],
-    default: "medium"
-  },
-
   estimatedDuration: {
     type: Number,
     required: true
   },
 
+  priority: {
+    type: Number,
+    default: 1
+  },
+
+  type: {
+    type: String,
+
+    enum: [
+      "ELASTIC",
+      "INELASTIC"
+    ],
+
+    default: "ELASTIC"
+  },
+
+  fixedStartTime: {
+    type: Date,
+    default: null
+  },
+
+  fixedEndTime: {
+    type: Date,
+    default: null
+  },
+
   status: {
     type: String,
+
     enum: [
       "pending",
       "in_progress",
       "completed"
     ],
+
     default: "pending"
   },
 
-  isFixed: {
+  completed: {
     type: Boolean,
     default: false
   },
+  precedingTaskId: {
 
-  scheduledFor: {
-    type: Date,
-    default: null
-  }
+  type:
+    mongoose.Schema.Types.ObjectId,
 
-}, { timestamps: true });
+  ref: "Task",
 
-module.exports =
-mongoose.model("Task", taskSchema);
+  default: null
+},
+sequenceOrder: {
+  type: Number,
+  default: 0
+},
 
+isLocked: {
+  type: Boolean,
+  default: false
+}
 
+}, {
+  timestamps: true
+});
 
-// WHAT IS HAPPENING HERE?
-// user
-
-// Links task to owner.
-
-// VERY important for:
-
-// analytics
-// authorization
-// personalization
-// estimatedDuration
-
-// Stored in:
-
-// minutes
-
-// NOT hours.
-
-// Why?
-
-// Because:
-
-// smaller units give scheduling precision.
-// isFixed
-
-// THIS is important for Phase 3.
-
-// Example:
-
-// Fixed
-// college class
-// meeting
-// sleep
-
-// Cannot move.
-
-// Flexible
-// study session
-// revision
-// practice
-
-// Can move dynamically.
-
-// This is:
-
-// future scheduling intelligence foundation.
+module.exports =mongoose.model("Task",taskSchema);
