@@ -1,45 +1,58 @@
-const mongoose =
-require("mongoose");
+const mongoose = require("mongoose");
 
-const analyticsSchema =
-new mongoose.Schema({
+const analyticsSchema = new mongoose.Schema({
 
-  userId: {
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true
+    },
 
-    type:
-      mongoose.Schema.Types.ObjectId,
+    date: {
+        type: Date,
+        required: true
+    },
 
-    ref: "User",
+    plannedMinutes: {
+        type: Number,
+        default: 0
+    },
 
-    required: true
-  },
+    focusedMinutes: {
+        type: Number,
+        default: 0
+    },
 
-  focusIntegrityScore: {
-    type: Number,
-    default: 0
-  },
+    completedSessions: {
+        type: Number,
+        default: 0
+    },
 
-  completedSessions: {
-    type: Number,
-    default: 0
-  },
+    distractionCount: {
+        type: Number,
+        default: 0
+    },
 
-  distractionCount: {
-    type: Number,
-    default: 0
-  },
-
-  totalFocusedMinutes: {
-    type: Number,
-    default: 0
-  }
+    focusIntegrityScore: {
+        type: Number,
+        default: 0
+    }
 
 }, {
-  timestamps: true
+    timestamps: true
 });
 
-module.exports =
-mongoose.model(
-  "Analytics",
-  analyticsSchema
+analyticsSchema.index(
+    {
+        userId: 1,
+        date: 1
+    },
+    {
+        unique: true
+    }
+);
+
+module.exports = mongoose.model(
+    "Analytics",
+    analyticsSchema
 );
