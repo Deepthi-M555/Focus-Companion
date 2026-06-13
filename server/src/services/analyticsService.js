@@ -1,36 +1,23 @@
 function calculateFocusScore({
-
-  focusedMinutes,
-
-  plannedMinutes,
-
-  distractions
-
+    focusedMinutes,
+    plannedMinutes,
+    distractions
 }) {
 
-  const completionRatio =
+    if (plannedMinutes === 0) {
+        return 0;
+    }
 
-    focusedMinutes /
-    plannedMinutes;
+    const completionScore =
+        (focusedMinutes / plannedMinutes) * 100;
 
-  const distractionPenalty =
+    const distractionPenalty =
+        Math.min(distractions * 3, 30);
 
-    distractions * 0.05;
-
-  const score =
-
-    Math.max(
-      0,
-      (
-        completionRatio
-        - distractionPenalty
-      ) * 100
+    return Math.max(
+        0,
+        Math.round(
+            completionScore - distractionPenalty
+        )
     );
-
-  return Math.floor(score);
-
 }
-
-module.exports = {
-  calculateFocusScore
-};
