@@ -1,44 +1,98 @@
 const {
-  app,
-  BrowserWindow
+    app,
+    ipcMain
 } = require("electron");
 
-const path =
-require("path");
+const createMainWindow =
+    require("./createMainWindow");
 
-function createWindow() {
+const createOverlay =
+    require("./createOverlay");
 
-  const win =
-    new BrowserWindow({
+let mainWindow;
 
-      width: 1400,
-
-      height: 900,
-
-      webPreferences: {
-
-        preload:
-          path.join(
-            __dirname,
-            "preload.js"
-          ),
-
-        contextIsolation: true,
-
-        nodeIntegration: false
-
-      }
-
-    });
-
-  win.loadURL(
-    "http://localhost:5173"
-  );
-
-}
+let overlayWindow;
 
 app.whenReady().then(() => {
 
-  createWindow();
+    mainWindow =
+        createMainWindow();
+
+    overlayWindow =
+        createOverlay();
 
 });
+
+/*
+    Overlay Controls
+*/
+
+ipcMain.on(
+    "show-overlay",
+
+    () => {
+
+        overlayWindow.show();
+
+    }
+);
+
+ipcMain.on(
+    "hide-overlay",
+
+    () => {
+
+        overlayWindow.hide();
+
+    }
+);
+
+/*
+    Focus Controls
+*/
+
+ipcMain.on(
+    "focus-mode",
+
+    () => {
+
+        console.log(
+            "Focus Mode Started"
+        );
+
+    }
+);
+
+ipcMain.on(
+    "pause-session",
+
+    () => {
+
+        console.log(
+            "Session Paused"
+        );
+
+    }
+);
+
+ipcMain.on(
+    "complete-session",
+
+    () => {
+
+        console.log(
+            "Session Completed"
+        );
+
+    }
+);
+
+app.on(
+    "window-all-closed",
+
+    () => {
+
+        app.quit();
+
+    }
+);
