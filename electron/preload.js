@@ -1,56 +1,65 @@
 const {
-  contextBridge,
-  ipcRenderer
+    contextBridge,
+    ipcRenderer
 } = require("electron");
 
 contextBridge.exposeInMainWorld(
+    "electronAPI",
+    {
 
-  "electronAPI",
+        startFocusMode: () =>
+            ipcRenderer.send(
+                "focus-mode"
+            ),
 
-  {
+        pauseSession: () =>
+            ipcRenderer.send(
+                "pause-session"
+            ),
 
-    focusMode: () =>
+        completeSession: () =>
+            ipcRenderer.send(
+                "complete-session"
+            ),
 
-      ipcRenderer.send(
-        "focus-mode"
-      ),
+        showOverlay: () =>
+            ipcRenderer.send(
+                "show-overlay"
+            ),
 
-    onCheckIn: (callback) =>
+        hideOverlay: () =>
+            ipcRenderer.send(
+                "hide-overlay"
+            ),
 
-      ipcRenderer.on(
-        "check-in",
-        callback
-      )
+        onVoiceCheckIn: (
+            callback
+        ) => {
 
-  }
+            const listener = (
+                event,
+                payload
+            ) => {
 
+                callback(payload);
+
+            };
+
+            ipcRenderer.on(
+                "voice-check-in",
+                listener
+            );
+
+            return () => {
+
+                ipcRenderer.removeListener(
+                    "voice-check-in",
+                    listener
+                );
+
+            };
+
+        }
+
+    }
 );
-
-
-
-/*WHAT THIS DOES
-
-You safely expose:
-
-window.electronAPI
-
-to React.
-
-NOT full Node.js.
-
-VERY important security architecture.
-
-FLOW
-React
-↓
-window.electronAPI.focusMode()
-↓
-IPC message
-↓
-Electron Main Process
-↓
-native desktop action
-
-THIS is:
-
-inter-process communication.*/
