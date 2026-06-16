@@ -1,63 +1,106 @@
 const STATES = {
 
-  IDLE: "IDLE",
+    IDLE: "IDLE",
 
-  ACTIVE: "ACTIVE",
+    ACTIVE: "ACTIVE",
 
-  CHECK_IN_PENDING:
-    "CHECK_IN_PENDING",
+    CHECK_IN_PENDING:
+        "CHECK_IN_PENDING",
 
-  COMPLETED: "COMPLETED"
+    SNOOZED: "SNOOZED",
+
+    COMPLETED: "COMPLETED",
+
+    RECOVERY_ENGINE:
+        "RECOVERY_ENGINE"
 
 };
 
 const transitions = {
 
-  IDLE: ["ACTIVE"],
+    IDLE: [
 
-  ACTIVE: [
-    "CHECK_IN_PENDING"
-  ],
+        "ACTIVE"
 
-  CHECK_IN_PENDING: [
-    "COMPLETED",
-    "ACTIVE"
-  ]
+    ],
+
+    ACTIVE: [
+
+        "CHECK_IN_PENDING"
+
+    ],
+
+    CHECK_IN_PENDING: [
+
+        "COMPLETED",
+
+        "SNOOZED",
+
+        "RECOVERY_ENGINE"
+
+    ],
+
+    SNOOZED: [
+
+        "ACTIVE",
+
+        "RECOVERY_ENGINE"
+
+    ],
+
+    RECOVERY_ENGINE: [
+
+        "ACTIVE",
+
+        "COMPLETED"
+
+    ]
 
 };
 
 function transition({
 
-  currentState,
+    currentState,
 
-  nextState
+    nextState
 
 }) {
 
-  const allowed =
+    const allowed =
+        transitions[currentState];
 
-    transitions[currentState];
+    if (
 
-  if (
-    !allowed.includes(
-      nextState
-    )
-  ) {
+        !allowed ||
 
-    throw new Error(
-      "Invalid Transition"
-    );
+        !allowed.includes(
+            nextState
+        )
 
-  }
+    ) {
 
-  return nextState;
+        throw new Error(
+
+            `Invalid Transition:
+
+            ${currentState}
+
+            →
+
+            ${nextState}`
+
+        );
+
+    }
+
+    return nextState;
 
 }
 
 module.exports = {
 
-  STATES,
+    STATES,
 
-  transition
+    transition
 
 };
