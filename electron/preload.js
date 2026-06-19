@@ -7,19 +7,19 @@ contextBridge.exposeInMainWorld(
     "electronAPI",
     {
 
-        startFocusMode: () =>
+        startFocusSession: () =>
             ipcRenderer.send(
-                "focus-mode"
+                "start-focus-session"
             ),
 
-        pauseSession: () =>
+        pauseFocusSession: () =>
             ipcRenderer.send(
-                "pause-session"
+                "pause-focus-session"
             ),
 
-        completeSession: () =>
+        completeFocusSession: () =>
             ipcRenderer.send(
-                "complete-session"
+                "complete-focus-session"
             ),
 
         showOverlay: () =>
@@ -32,34 +32,31 @@ contextBridge.exposeInMainWorld(
                 "hide-overlay"
             ),
 
-        onVoiceCheckIn: (
-            callback
-        ) => {
+        onCheckInRequired:
+            (callback) => {
 
-            const listener = (
-                event,
-                payload
-            ) => {
+                const listener =
+                    (_, data) => {
 
-                callback(payload);
+                        callback(data);
 
-            };
+                    };
 
-            ipcRenderer.on(
-                "voice-check-in",
-                listener
-            );
-
-            return () => {
-
-                ipcRenderer.removeListener(
-                    "voice-check-in",
+                ipcRenderer.on(
+                    "check-in-required",
                     listener
                 );
 
-            };
+                return () => {
 
-        }
+                    ipcRenderer.removeListener(
+                        "check-in-required",
+                        listener
+                    );
+
+                };
+
+            }
 
     }
 );
