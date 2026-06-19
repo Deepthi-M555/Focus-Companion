@@ -9,8 +9,13 @@ const createMainWindow =
 const createOverlay =
     require("./createOverlay");
 
-let mainWindow;
+const registerOverlayIPC =
+    require("./ipc/overlayIPC");
 
+const registerFocusIPC =
+    require("./ipc/focusIPC");
+
+let mainWindow;
 let overlayWindow;
 
 app.whenReady().then(() => {
@@ -21,78 +26,45 @@ app.whenReady().then(() => {
     overlayWindow =
         createOverlay();
 
+    registerOverlayIPC({
+        ipcMain,
+        overlayWindow
+    });
+
+    registerFocusIPC({
+        ipcMain
+    });
+
 });
 
-/*
-    Overlay Controls
-*/
-
-ipcMain.on(
-    "show-overlay",
-
+app.on(
+    "window-all-closed",
     () => {
 
-        overlayWindow.show();
+        if (
+            process.platform !== "darwin"
+        ) {
 
-    }
-);
+            app.quit();
 
-ipcMain.on(
-    "hide-overlay",
-
-    () => {
-
-        overlayWindow.hide();
-
-    }
-);
-
-/*
-    Focus Controls
-*/
-
-ipcMain.on(
-    "focus-mode",
-
-    () => {
-
-        console.log(
-            "Focus Mode Started"
-        );
-
-    }
-);
-
-ipcMain.on(
-    "pause-session",
-
-    () => {
-
-        console.log(
-            "Session Paused"
-        );
-
-    }
-);
-
-ipcMain.on(
-    "complete-session",
-
-    () => {
-
-        console.log(
-            "Session Completed"
-        );
+        }
 
     }
 );
 
 app.on(
-    "window-all-closed",
-
+    "activate",
     () => {
 
-        app.quit();
+        if (
+            BrowserWindow.getAllWindows()
+                .length === 0
+        ) {
+
+            mainWindow =
+                createMainWindow();
+
+        }
 
     }
 );
