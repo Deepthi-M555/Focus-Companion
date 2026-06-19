@@ -1,0 +1,25 @@
+const RESPONSE_ACTIONS = Object.freeze({
+
+    NONE:
+        "NONE",
+
+    GENERATE_TIMETABLE:
+        "GENERATE_TIMETABLE",
+
+    REGENERATE_TIMETABLE:
+        "REGENERATE_TIMETABLE",
+
+    START_FOCUS:
+        "START_FOCUS",
+
+    TRIGGER_BREAK:
+        "TRIGGER_BREAK",
+
+    ACTIVATE_STRICT_MODE:
+        "ACTIVATE_STRICT_MODE"
+
+});
+
+module.exports = {
+    RESPONSE_ACTIONS
+};
