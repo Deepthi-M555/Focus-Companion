@@ -1,28 +1,73 @@
 const {
-    GoogleGenerativeAI
-} = require("@google/generative-ai");
+    app,
+    ipcMain,
+    BrowserWindow
+} = require("electron");
 
-const genAI =
-    new GoogleGenerativeAI(
-        process.env.GEMINI_API_KEY
-    );
+const createMainWindow =
+    require("./createMainWindow");
 
-const model =
-    genAI.getGenerativeModel({
-        model: "gemini-1.5-flash"
+const createOverlay =
+    require("./createOverlay");
+
+const registerOverlayIPC =
+    require("./ipc/overlayIPC");
+
+const registerFocusIPC =
+    require("./ipc/focusIPC");
+
+let mainWindow;
+
+let overlayWindow;
+
+app.whenReady().then(() => {
+
+    mainWindow =
+        createMainWindow();
+
+    overlayWindow =
+        createOverlay();
+
+    registerOverlayIPC({
+        ipcMain,
+        overlayWindow
     });
 
-async function generateResponse(prompt) {
+    registerFocusIPC({
+        ipcMain
+    });
 
-    const result =
-        await model.generateContent(prompt);
+});
 
-    const response =
-        result.response;
+app.on(
+    "window-all-closed",
+    () => {
 
-    return response.text();
-}
+        if (
+            process.platform !== "darwin"
+        ) {
 
-module.exports = {
-    generateResponse
-};
+            app.quit();
+
+        }
+
+    }
+);
+
+app.on(
+    "activate",
+    () => {
+
+        if (
+            BrowserWindow
+                .getAllWindows()
+                .length === 0
+        ) {
+
+            mainWindow =
+                createMainWindow();
+
+        }
+
+    }
+);
