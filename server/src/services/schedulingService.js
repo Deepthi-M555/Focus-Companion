@@ -1,95 +1,131 @@
-function generateSchedule(
-  tasks
-) {
+function generateSchedule(tasks, startTime = new Date()) {
 
-  /*
-    Split Tasks
-  */
+    const elasticTasks =
+        tasks
+            .filter(
+                task =>
+                    task.type ===
+                    "ELASTIC"
+            )
+            .sort(
+                (a, b) =>
+                    b.priority -
+                    a.priority
+            );
 
-  const elasticTasks =
-    tasks.filter(
-      task =>
-        task.type ===
-        "ELASTIC"
-    );
+    const inelasticTasks =
+        tasks
+            .filter(
+                task =>
+                    task.type ===
+                    "INELASTIC"
+            )
+            .sort(
+                (a, b) =>
+                    new Date(a.fixedStartTime) -
+                    new Date(b.fixedStartTime)
+            );
 
-  const inelasticTasks =
-    tasks.filter(
-      task =>
-        task.type ===
-        "INELASTIC"
-    );
+    const schedule = [];
 
-  /*
-    Sort Elastic Tasks
-    by priority
-  */
+    let currentTime =
+        new Date(startTime);
 
-  elasticTasks.sort(
-    (a, b) =>
-      b.priority - a.priority
-  );
+    for (const task of elasticTasks) {
 
-  /*
-    Day Start
-  */
+        const taskStart =
+            new Date(currentTime);
 
-  let currentTime =
-    new Date();
+        const taskEnd =
+            new Date(
+                taskStart.getTime() +
+                task.estimatedDuration *
+                60000
+            );
 
-  const schedule = [];
+        schedule.push({
 
-  /*
-    Allocate Elastic Tasks
-  */
+            title:
+                task.title,
 
-  for (const task of elasticTasks) {
+            type:
+                task.type,
 
-    const startTime =
-      new Date(currentTime);
+            priority:
+                task.priority,
 
-    const endTime =
-      new Date(
-        currentTime.getTime() +
-        task.estimatedDuration
-        * 60000
-      );
+            startTime:
+                taskStart,
 
-    schedule.push({
+            endTime:
+                taskEnd
 
-      title: task.title,
+        });
 
-      startTime,
+        /*
+            Adaptive Break Logic
+        */
 
-      endTime,
+        let breakMinutes = 5;
 
-      priority:
-        task.priority
+        if (
+            task.estimatedDuration >= 90
+        ) {
 
-    });
+            breakMinutes = 15;
+
+        } else if (
+            task.estimatedDuration >= 45
+        ) {
+
+            breakMinutes = 10;
+
+        }
+
+        currentTime =
+            new Date(
+                taskEnd.getTime() +
+                breakMinutes * 60000
+            );
+
+    }
 
     /*
-      MICRO BREAK
-      5 mins
+        Fixed Tasks
     */
 
-    currentTime =
-      new Date(
-        endTime.getTime() +
-        5 * 60000
-      );
+    for (const task of inelasticTasks) {
 
-  }
+        schedule.push({
 
-  return {
+            title:
+                task.title,
 
-    inelasticTasks,
-    schedule
+            type:
+                task.type,
 
-  };
+            priority:
+                task.priority,
 
+            startTime:
+                task.fixedStartTime,
+
+            endTime:
+                task.fixedEndTime
+
+        });
+
+    }
+
+    schedule.sort(
+        (a, b) =>
+            new Date(a.startTime) -
+            new Date(b.startTime)
+    );
+
+    return schedule;
 }
 
 module.exports = {
-  generateSchedule
+    generateSchedule
 };
