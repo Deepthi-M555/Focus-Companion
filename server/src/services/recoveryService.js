@@ -1,63 +1,126 @@
 function recoverSchedule({
 
-  remainingTasks,
+    remainingTasks,
 
-  availableMinutes
+    availableMinutes
 
 }) {
 
-  /*
-    Total Remaining Work
-  */
+    const recoveredTasks =
+        [...remainingTasks];
 
-  const totalWork =
-    remainingTasks.reduce(
+    let totalWork =
+        recoveredTasks.reduce(
 
-      (sum, task) =>
+            (sum, task) =>
 
-        sum +
-        task.estimatedDuration,
+                sum +
+                task.estimatedDuration,
 
-      0
-    );
+            0
 
-  /*
-    Overflow Detection
-  */
+        );
 
-  if (
-    totalWork >
-    availableMinutes
-  ) {
-
-    /*
-      Compress Low Priority
-    */
-
-    remainingTasks.sort(
-      (a, b) =>
-        a.priority - b.priority
-    );
-
-    for (
-      const task
-      of remainingTasks
+    if (
+        totalWork <=
+        availableMinutes
     ) {
 
-      task.estimatedDuration =
-        Math.floor(
-          task.estimatedDuration
-          * 0.8
+        return {
+
+            tasks:
+                recoveredTasks,
+
+            recovered:
+                false,
+
+            suggestions: []
+
+        };
+
+    }
+
+    /*
+        Lowest priority first
+    */
+
+    recoveredTasks.sort(
+        (a, b) =>
+            a.priority -
+            b.priority
+    );
+
+    const suggestions = [];
+
+    for (const task of recoveredTasks) {
+
+        if (
+            totalWork <=
+            availableMinutes
+        ) {
+
+            break;
+
+        }
+
+        /*
+            Preserve important tasks
+        */
+
+        if (
+            task.priority >= 4
+        ) {
+
+            continue;
+
+        }
+
+        const originalDuration =
+            task.estimatedDuration;
+
+        const compressedDuration =
+            Math.max(
+
+                15,
+
+                Math.floor(
+                    originalDuration *
+                    0.8
+                )
+
+            );
+
+        task.estimatedDuration =
+            compressedDuration;
+
+        totalWork -=
+            (
+                originalDuration -
+                compressedDuration
+            );
+
+        suggestions.push(
+
+            `Compressed "${task.title}" from ${originalDuration}m to ${compressedDuration}m`
+
         );
 
     }
 
-  }
+    return {
 
-  return remainingTasks;
+        tasks:
+            recoveredTasks,
+
+        recovered:
+            true,
+
+        suggestions
+
+    };
 
 }
 
 module.exports = {
-  recoverSchedule
+    recoverSchedule
 };
