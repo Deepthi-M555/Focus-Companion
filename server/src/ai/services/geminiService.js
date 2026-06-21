@@ -1,73 +1,102 @@
 const {
-    app,
-    ipcMain,
-    BrowserWindow
-} = require("electron");
+    GoogleGenerativeAI
+} = require(
+    "@google/generative-ai"
+);
 
-const createMainWindow =
-    require("./createMainWindow");
+const genAI =
+    new GoogleGenerativeAI(
+        process.env.GEMINI_API_KEY
+    );
 
-const createOverlay =
-    require("./createOverlay");
+const model =
+    genAI.getGenerativeModel({
 
-const registerOverlayIPC =
-    require("./ipc/overlayIPC");
+        model:
+            "gemini-1.5-flash"
 
-const registerFocusIPC =
-    require("./ipc/focusIPC");
-
-let mainWindow;
-
-let overlayWindow;
-
-app.whenReady().then(() => {
-
-    mainWindow =
-        createMainWindow();
-
-    overlayWindow =
-        createOverlay();
-
-    registerOverlayIPC({
-        ipcMain,
-        overlayWindow
     });
 
-    registerFocusIPC({
-        ipcMain
-    });
+async function generateResponse(
+    prompt
+) {
 
-});
+    try {
 
-app.on(
-    "window-all-closed",
-    () => {
+        const result =
+            await model.generateContent(
+                prompt
+            );
 
-        if (
-            process.platform !== "darwin"
-        ) {
+        const text =
+            result.response.text();
 
-            app.quit();
+        let parsed;
+
+        try {
+
+            parsed =
+                JSON.parse(text);
+
+        } catch {
+
+            parsed = {
+
+                message:
+                    "I couldn't understand the response.",
+
+                action:
+                    "NONE",
+
+                suggestions: [],
+
+                data: {}
+
+            };
 
         }
 
+        return {
+
+            message:
+                parsed.message || "",
+
+            action:
+                parsed.action || "NONE",
+
+            suggestions:
+                parsed.suggestions || [],
+
+            data:
+                parsed.data || {}
+
+        };
+
+    } catch (error) {
+
+        console.error(
+            "Gemini Error:",
+            error
+        );
+
+        return {
+
+            message:
+                "AI service unavailable.",
+
+            action:
+                "NONE",
+
+            suggestions: [],
+
+            data: {}
+
+        };
+
     }
-);
 
-app.on(
-    "activate",
-    () => {
+}
 
-        if (
-            BrowserWindow
-                .getAllWindows()
-                .length === 0
-        ) {
-
-            mainWindow =
-                createMainWindow();
-
-        }
-
-    }
-);
+module.exports = {
+    generateResponse
+};
