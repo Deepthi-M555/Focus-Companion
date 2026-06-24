@@ -43,6 +43,8 @@ new Server(server, {
 
 });
 
+app.set("io",io);
+
 /*
   Socket Authentication
 */
