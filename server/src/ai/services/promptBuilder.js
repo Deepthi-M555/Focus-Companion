@@ -1,8 +1,18 @@
+const {
+    buildPersonalityPrompt
+} = require(
+    "./personalityBuilder"
+);
 function buildPrompt({
     userMessage,
     behaviorInsights,
-    analytics
+    analytics,
+    personality
 }) {
+    const personalityPrompt =
+        buildPersonalityPrompt(
+            personality
+        );
 
     return `
 You are FYNIX.
@@ -112,6 +122,9 @@ Return:
 }
 
 --------------------------------
+Personality:
+
+${personalityPrompt}
 
 Behavior Insights:
 
