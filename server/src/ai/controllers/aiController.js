@@ -10,6 +10,17 @@ const {
     "../../services/recoveryService"
 );
 
+const CompanionSettings =
+    require(
+        "../../models/CompanionSettings"
+    );
+
+const {
+    executeAction
+} = require(
+    "../services/actionExecutor"
+);
+
 const {
     RESPONSE_ACTIONS
 } = require(
@@ -45,6 +56,21 @@ exports.chat = async (
 
         } = req.body;
 
+        const settings =
+            await CompanionSettings
+                .findOne({
+
+                    userId:
+                        req.user._id
+
+                });
+
+        const personality =
+
+            settings?.personality ||
+
+            "GENTLE";
+
         const prompt =
             buildPrompt({
 
@@ -53,7 +79,9 @@ exports.chat = async (
 
                 behaviorInsights,
 
-                analytics
+                analytics,
+
+                personality
 
             });
 
@@ -62,6 +90,19 @@ exports.chat = async (
                 prompt
             );
 
+        executeAction({
+
+            action:
+                aiResponse.action,
+
+            io:
+                req.app.get("io"),
+
+            userId:
+                req.user._id
+
+        });
+                
         /*
         ============================
         TIMETABLE GENERATION
