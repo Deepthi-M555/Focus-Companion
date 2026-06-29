@@ -1,18 +1,41 @@
-import { useNavigate } from "react-router-dom";
-import { motion } from "motion/react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";import { motion } from "motion/react";
 import { Mic, Bell, Monitor, Settings } from "lucide-react";
 import { Button } from "../components/ui/Button.jsx";
 import { Label } from "../components/ui/Label.jsx";
 import { Switch } from "../components/ui/Switch.jsx";
 import { RadioGroup, RadioGroupItem } from "../components/ui/RadioGroup.jsx";
 import { Select } from "../components/ui/Select.jsx";
+import { Input } from "../components/ui/Input.jsx";
+
+import { saveSetup } from "../services/setupService";
 
 export function Setup() {
   const navigate = useNavigate();
 
-  const handleFinish = (e) => {
+  const [frequency, setFrequency] = useState("30");
+  const [customFrequency, setCustomFrequency] = useState("");
+
+  const handleFinish = async (e) => {
     e.preventDefault();
-    navigate("/dashboard");
+    try {
+        await saveSetup({
+            microphone: true,
+            notifications: true,
+            overlay: true,
+            frequency:
+                frequency === "custom"
+                    ? Number(customFrequency)
+                    : Number(frequency),
+            snoozeDuration: 5,
+            maxSnoozes: 3
+        });
+        navigate("/dashboard");
+    }
+    catch (error) {
+        console.error(error);
+        alert("Setup failed.");
+    }
   };
 
   return (
@@ -81,7 +104,7 @@ export function Setup() {
           {/* Check-In Frequency */}
           <section className="space-y-4">
             <h2 className="text-lg font-medium border-b border-neutral-100 dark:border-neutral-800 pb-2">Default Check-In Frequency</h2>
-            <RadioGroup defaultValue="30" className="grid grid-cols-2 gap-4">
+              <RadioGroup value={frequency} onValueChange={setFrequency} className="grid grid-cols-2 gap-4">
               <div className="flex items-center space-x-3 p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors">
                 <RadioGroupItem value="15" id="r1" />
                 <Label htmlFor="r1" className="cursor-pointer">Every 15 minutes</Label>
@@ -99,6 +122,22 @@ export function Setup() {
                 <Label htmlFor="r4" className="cursor-pointer">Custom</Label>
               </div>
             </RadioGroup>
+
+            {frequency === "custom" && (
+            <div className="mt-4">
+              <Label>Custom Check-in Interval (minutes)</Label>
+
+              <Input
+                type="number"
+                placeholder="Enter minutes"
+                value={customFrequency}
+                onChange={(e) => setCustomFrequency(e.target.value)}
+                className="mt-2"
+                min="1"
+              />
+            </div>
+          )}
+          
           </section>
 
           {/* Snooze Preferences */}
@@ -125,7 +164,7 @@ export function Setup() {
             </div>
           </section>
 
-          <Button type="submit" variant="primary" size="lg" className="w-full">
+          <Button type="submit" variant="primary" size="lg" className="w-full" >
             Finish Setup
           </Button>
         </form>

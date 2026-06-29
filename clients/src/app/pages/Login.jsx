@@ -6,13 +6,28 @@ import { Button } from "../components/ui/Button.jsx";
 import { Input } from "../components/ui/Input.jsx";
 import { Label } from "../components/ui/Label.jsx";
 
+import { login } from "../services/authService";
+import { saveToken } from "../utils/token";
+
 export function Login() {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleLogin = (e) => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  
+  const handleLogin = async (e) => {
     e.preventDefault();
-    navigate("/dashboard");
+    try {
+        const response = await login({
+            email,
+            password
+        });
+        saveToken(response.token);
+        navigate("/dashboard");
+    } catch (error) {
+        console.error(error);
+    }
   };
 
   return (
@@ -30,7 +45,9 @@ export function Login() {
       <form onSubmit={handleLogin} className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
-          <Input id="email" type="email" placeholder="name@example.com" required />
+          <Input value={email} onChange={(e)=>setEmail(e.target.value)} id="email" type="email" 
+          placeholder="Enter your email"
+          required/>
         </div>
         
         <div className="space-y-2 relative">
@@ -39,6 +56,8 @@ export function Login() {
           </div>
           <div className="relative">
             <Input 
+              value={password} 
+              onChange={(e)=>setPassword(e.target.value)} 
               id="password" 
               type={showPassword ? "text" : "password"} 
               placeholder="Enter your password" 

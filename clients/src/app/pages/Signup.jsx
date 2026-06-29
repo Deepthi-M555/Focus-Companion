@@ -4,13 +4,31 @@ import { Button } from "../components/ui/Button.jsx";
 import { Input } from "../components/ui/Input.jsx";
 import { Label } from "../components/ui/Label.jsx";
 
+import { signup } from "../services/authService";
+import { saveToken } from "../utils/token";
+
 export function Signup() {
   const navigate = useNavigate();
 
-  const handleSignup = (e) => {
+  const [name,setName]=useState("");
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [confirmPassword,setConfirmPassword]=useState("");
+
+  const handleSignup = async (e) => {
     e.preventDefault();
-    navigate("/setup");
-  };
+    try {
+        const response = await signup({
+            name,
+            email,
+            password
+        });
+        saveToken(response.token);
+        navigate("/setup");
+    } catch (error) {
+        console.error(error);
+    }
+};
 
   return (
     <motion.div 
@@ -27,22 +45,50 @@ export function Signup() {
       <form onSubmit={handleSignup} className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="name">Name</Label>
-          <Input id="name" type="text" placeholder="John Doe" required />
+          <Input
+            id="name"
+            type="text"
+            placeholder="Enter your name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
-          <Input id="email" type="email" placeholder="name@example.com" required />
+          <Input
+            id="email"
+            type="email"
+            placeholder="name@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
         </div>
         
         <div className="space-y-2">
           <Label htmlFor="password">Password</Label>
-          <Input id="password" type="password" placeholder="Create a strong password" required />
+          <Input
+            id="password"
+            type="password"
+            placeholder="Create a strong password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="confirm-password">Confirm Password</Label>
-          <Input id="confirm-password" type="password" placeholder="Repeat your password" required />
+          <Input
+            id="confirm-password"
+            type="password"
+            placeholder="Repeat your password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+          />
         </div>
 
         <Button type="submit" variant="primary" className="w-full h-12 text-base mt-2">
