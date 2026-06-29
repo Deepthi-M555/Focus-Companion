@@ -1,4 +1,5 @@
-import { Outlet, useLocation, Link } from "react-router";
+import { useState } from "react";
+import { Outlet, useLocation, Link, useNavigate } from "react-router-dom";
 import { 
   LayoutDashboard, 
   Target, 
@@ -20,6 +21,8 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "../componen
 export function AppLayout() {
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
+  const navigate = useNavigate();
+  const [streak] = useState(12);
 
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
@@ -67,11 +70,11 @@ export function AppLayout() {
               <Flame className="w-4 h-4 text-orange-500" />
               <span className="text-sm font-medium text-orange-700 dark:text-orange-400">Current Streak</span>
             </div>
-            <span className="font-bold text-orange-600 dark:text-orange-500">12</span>
+            <span className="font-bold text-orange-600 dark:text-orange-500">{streak}</span>
           </div>
 
           <div className="flex items-center justify-between px-2">
-            <div className="flex items-center gap-3 cursor-pointer">
+            <div className="flex items-center gap-3 cursor-pointer" onClick={()=>navigate("/settings")} >
               <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 p-0.5">
                 <img 
                   src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=64&h=64&q=80" 
