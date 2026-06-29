@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate } from "react-router";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 import { AuthLayout } from "./layouts/AuthLayout.jsx";
 import { AppLayout } from "./layouts/AppLayout.jsx";
 import { Login } from "./pages/Login.jsx";
@@ -11,11 +11,15 @@ import { Overlay } from "./pages/Overlay.jsx";
 import { Analytics } from "./pages/Analytics.jsx";
 import { Settings } from "./pages/Settings.jsx";
 import { Recovery } from "./pages/Recovery.jsx";
+import { ErrorPage } from "./pages/ErrorPage.jsx";
+
+import ProtectedRoute from "./components/ProtectedRoute";
 
 export const router = createBrowserRouter([
   {
     path: "/",
     element: <Navigate to="/login" replace />,
+    errorElement: <ErrorPage />,
   },
   {
     element: <AuthLayout />,
@@ -23,24 +27,74 @@ export const router = createBrowserRouter([
       { path: "login", element: <Login /> },
       { path: "signup", element: <Signup /> },
     ],
+    errorElement: <ErrorPage />,
   },
   {
     path: "setup",
-    element: <Setup />,
+    element: (
+      <ProtectedRoute>
+        <Setup />
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorPage />,
   },
   {
     path: "overlay",
     element: <Overlay />,
+    errorElement: <ErrorPage />,
   },
   {
     element: <AppLayout />,
     children: [
-      { path: "dashboard", element: <Dashboard /> },
-      { path: "timetable", element: <Timetable /> },
-      { path: "focus", element: <FocusMode /> },
-      { path: "recovery", element: <Recovery /> },
-      { path: "analytics", element: <Analytics /> },
-      { path: "settings", element: <Settings /> },
+      {
+        path: "dashboard",
+        element: (
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "timetable",
+        element: (
+          <ProtectedRoute>
+            <Timetable />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "focus",
+        element: (
+          <ProtectedRoute>
+            <FocusMode />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "recovery",
+        element: (
+          <ProtectedRoute>
+            <Recovery />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "analytics",
+        element: (
+          <ProtectedRoute>
+            <Analytics />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "settings",
+        element: (
+          <ProtectedRoute>
+            <Settings />
+          </ProtectedRoute>
+        ),
+      },
     ],
+    errorElement: <ErrorPage />,
   },
 ]);
