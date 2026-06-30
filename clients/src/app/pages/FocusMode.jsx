@@ -4,6 +4,12 @@ import { Play, Pause, Square, Mic, Shield, ShieldAlert, Check } from "lucide-rea
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button.jsx";
 
+import {
+    startSession,
+    pauseSession,
+    completeSession
+} from "../services/sessionService";
+
 export function FocusMode() {
   const navigate = useNavigate();
   const [mode, setMode] = useState("gentle");
@@ -17,6 +23,23 @@ export function FocusMode() {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
+  const handlePause = async () => {
+    try{
+        await pauseSession();
+        setIsPaused(
+            prev=>!prev
+        );
+    }
+    catch(error){
+        console.error(error);
+    }
+};
+
+  const handleComplete = async () => {
+    await completeSession();
+    navigate("/dashboard");
   };
 
   useEffect(() => {
@@ -35,6 +58,17 @@ export function FocusMode() {
       setCheckInStatus("listening");
     }, 5000);
     return () => clearTimeout(timer);
+  }, []);
+  useEffect(() => {
+    async function beginSession() {
+        try {
+            await startSession();
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    beginSession();
   }, []);
 
   const progress = ((45 * 60 - timeLeft) / (45 * 60)) * 100;
@@ -143,7 +177,7 @@ export function FocusMode() {
       <div className="p-8 relative z-10 flex justify-center gap-4">
         <Button 
           variant={isPaused ? "primary" : "outline"}
-          onClick={() => setIsPaused(!isPaused)}
+          onClick={handlePause}
           className="w-32"
         >
           {isPaused ? <Play className="w-4 h-4 mr-2" /> : <Pause className="w-4 h-4 mr-2" />}
@@ -151,7 +185,7 @@ export function FocusMode() {
         </Button>
         <Button 
           variant="outline"
-          onClick={() => navigate("/dashboard")}
+          onClick={handleComplete}
           className="w-32"
         >
           <Check className="w-4 h-4 mr-2" />
@@ -159,7 +193,7 @@ export function FocusMode() {
         </Button>
         <Button 
           variant="ghost"
-          onClick={() => navigate("/dashboard")}
+          onClick={handleComplete}
           className="w-32 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
         >
           <Square className="w-4 h-4 mr-2" />
