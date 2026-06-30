@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { Mic, Send, Sparkles, StopCircle, Play, Target } from "lucide-react";
 import { Button } from "../components/ui/Button.jsx";
 
+import { chat } from "../services/dashboardService";
+
 export function Dashboard() {
   const navigate = useNavigate();
   const [inputValue, setInputValue] = useState("");
@@ -21,19 +23,30 @@ export function Dashboard() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!inputValue.trim()) return;
-    
-    setMessages(prev => [...prev, { role: "user", text: inputValue }]);
+    const userMessage = inputValue;
+    setMessages(prev => [
+        ...prev,
+        {
+            role: "user",
+            text: userMessage
+        }
+    ]);
     setInputValue("");
-    
-    // Simulate AI response
-    setTimeout(() => {
-      setMessages(prev => [...prev, { 
-        role: "ai", 
-        text: "I've structured a balanced plan. We'll start with a deep dive into DSA, followed by a brief break, and then OS. Does this look good to you?" 
-      }]);
-    }, 1500);
+    try {
+        const response = await chat(userMessage);
+        setMessages(prev => [
+            ...prev,
+            {
+                role: "ai",
+                text: response.message
+            }
+        ]);
+    }
+    catch (error) {
+        console.error(error);
+    }
   };
 
   const toggleRecording = () => {
