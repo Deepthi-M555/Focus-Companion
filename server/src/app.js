@@ -4,6 +4,10 @@ const cors = require("cors");
 const authRoutes = require("./routes/authRoutes");
 const sessionRoutes = require("./routes/sessionRoutes");
 const taskRoutes = require("./routes/taskRoutes");
+const analyticsRoutes = require("./routes/analyticsRoutes");
+const scheduleRoutes = require("./routes/scheduleRoutes");
+const recoveryRoutes = require("./routes/recoveryRoutes");
+const setupRoutes = require("./routes/setupRoutes");
 
 const aiRoutes = require("./ai/routes/aiRoutes");
 const voiceRoutes = require("./voice/routes/voiceRoutes");
@@ -25,6 +29,10 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/sessions", sessionRoutes);
 app.use("/api/tasks", taskRoutes);
+app.use("/api/analytics", analyticsRoutes);
+app.use("/api/schedule", scheduleRoutes);
+app.use("/api/recovery", recoveryRoutes);
+app.use("/api/setup", setupRoutes);
 
 app.use("/api/ai",aiRoutes);
 app.use("/api/voice", voiceRoutes);
