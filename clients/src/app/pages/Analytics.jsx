@@ -1,27 +1,50 @@
 import { motion } from "motion/react";
+import { useState, useEffect } from "react";
+import { getAnalytics } from "../services/analyticsService";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from "recharts";
 import { Clock, Target, Calendar, Zap, AlertTriangle, Brain } from "lucide-react";
 
-const weeklyData = [
-  { name: 'Mon', hours: 4.5, expected: 5 },
-  { name: 'Tue', hours: 6.0, expected: 6 },
-  { name: 'Wed', hours: 5.5, expected: 6 },
-  { name: 'Thu', hours: 7.0, expected: 6.5 },
-  { name: 'Fri', hours: 4.0, expected: 5 },
-  { name: 'Sat', hours: 2.5, expected: 3 },
-  { name: 'Sun', hours: 0, expected: 0 },
-];
-
-const trendData = [
-  { day: 'Mon', score: 85 },
-  { day: 'Tue', score: 92 },
-  { day: 'Wed', score: 88 },
-  { day: 'Thu', score: 95 },
-  { day: 'Fri', score: 80 },
-  { day: 'Sat', score: 75 },
-];
-
 export function Analytics() {
+  const [stats, setStats] = useState({});
+  const [weeklyData, setWeeklyData] = useState([]);
+  const [trendData, setTrendData] = useState([]);
+  const [insight, setInsight] = useState("");
+  const [productiveTime, setProductiveTime] = useState("");
+  const [averageSession, setAverageSession] = useState("");
+  const [loading, setLoading] = useState(true);
+  
+  useEffect(() => {
+
+    async function loadAnalytics() {
+
+        try {
+
+            const data = await getAnalytics();
+
+            setStats(data.stats);
+
+            setWeeklyData(data.weeklyData);
+
+            setTrendData(data.trendData);
+
+            setInsight(data.insight);
+
+            setProductiveTime(data.productiveTime);
+
+            setAverageSession(data.averageSession);
+
+        } catch (error) {
+
+            console.error(error);
+
+        }
+
+    }
+
+    loadAnalytics();
+
+  }, []);
+
   return (
     <div className="flex-1 overflow-y-auto bg-white dark:bg-[#0a0a0a] p-8 scrollbar-hide relative">
       <div className="max-w-5xl mx-auto space-y-8">
@@ -44,17 +67,17 @@ export function Analytics() {
           <div>
             <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-1">AI Behavioral Insight</h4>
             <p className="text-blue-900/80 dark:text-blue-200/80 text-[15px] leading-relaxed">
-              You focus best between 9–11 AM. Your deep work sessions are 30% more likely to be completed without snoozing when scheduled during this window. Consider shifting heavy analytical tasks to the morning.
+              {insight}
             </p>
           </div>
         </motion.div>
 
         {/* Top Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Total Focus Hours" value="29.5h" icon={<Clock />} subtitle="This week" trend="+2.5h" />
-          <StatCard title="Focus Integrity" value="92%" icon={<Target />} subtitle="Session completion ratio" trend="+4%" />
-          <StatCard title="Current Streak" value="12 Days" icon={<Zap />} subtitle="Daily study target met" />
-          <StatCard title="Distractions" value="4" icon={<AlertTriangle />} subtitle="Interruptions this week" trend="-2" trendDownIsGood />
+          <StatCard title="Total Focus Hours" value={`${stats.focusHours ?? 0}h`} icon={<Clock />} subtitle="This week" />
+          <StatCard title="Focus Integrity" value={`${stats.focusIntegrity ?? 0}%`} icon={<Target />} subtitle="Session completion ratio" />
+          <StatCard title="Current Streak" value={`${stats.streak ?? 0} Days`} icon={<Zap />} subtitle="Daily study target met" />
+          <StatCard title="Distractions" value={stats.distractions ?? 0} icon={<AlertTriangle />} subtitle="Interruptions this week"  />
         </div>
 
         {/* Charts Grid */}
@@ -109,7 +132,7 @@ export function Analytics() {
           <div className="p-5 border border-neutral-200 dark:border-neutral-800 rounded-2xl flex items-center justify-between">
             <div>
               <p className="text-sm text-neutral-500 mb-1">Most Productive Time of Day</p>
-              <p className="text-lg font-medium">9:00 AM - 11:30 AM</p>
+              <p className="text-lg font-medium">{productiveTime}</p>
             </div>
             <div className="w-10 h-10 rounded-full bg-orange-50 dark:bg-orange-900/20 flex items-center justify-center">
               <Clock className="w-5 h-5 text-orange-500" />
@@ -118,7 +141,7 @@ export function Analytics() {
           <div className="p-5 border border-neutral-200 dark:border-neutral-800 rounded-2xl flex items-center justify-between">
             <div>
               <p className="text-sm text-neutral-500 mb-1">Average Session Length</p>
-              <p className="text-lg font-medium">42 Minutes</p>
+              <p className="text-lg font-medium">{averageSession}</p>
             </div>
             <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">
               <Target className="w-5 h-5 text-emerald-500" />
