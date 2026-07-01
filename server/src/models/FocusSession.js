@@ -62,7 +62,22 @@ new mongoose.Schema({
   notes: {
     type: String,
     default: ""
-  }
+  },
+  completedBy: {
+      type: String,
+      enum: [
+          "USER",
+          "TIMEOUT",
+          "RECOVERY",
+          "SYSTEM"
+      ],
+      default: null,
+  },
+  lastHeartbeatAt:{
+    type:Date,
+    default:null
+
+  },
 
 }, { timestamps: true });
 
