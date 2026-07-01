@@ -1,15 +1,29 @@
-const express = require("express");
+const express =
+require("express");
 
-const router = express.Router();
+const router =
+express.Router();
 
-const analyticsController = require("../controllers/analyticsController");
+const wrapAsync =
+require("../utils/wrapAsync");
 
-const { isLoggedIn } = require("../middleware/authMiddleware");
+const {
+    isLoggedIn
+} = require(
+    "../middleware/authMiddleware"
+);
+
+const {
+    getAnalytics
+} = require(
+    "../controllers/analyticsController"
+);
 
 router.get(
     "/",
     isLoggedIn,
-    analyticsController.getAnalytics
+    wrapAsync(getAnalytics)
 );
 
-module.exports = router;
+module.exports =
+router;

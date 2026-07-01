@@ -1,31 +1,17 @@
-const Analytics = require("../models/Analytics");
+const analyticsService =
+require("../services/analyticsService");
 
-module.exports.getAnalytics = async (req, res) => {
-    try {
+module.exports.getAnalytics =
+async (req, res) => {
 
-        const analytics = await Analytics.findOne({
-            userId: req.identity.userId
-        });
+    const analytics =
 
-        if (!analytics) {
-            return res.status(404).json({
-                message: "Analytics not found"
-            });
-        }
+        await analyticsService.getAnalytics(
 
-        res.json({
-            stats: analytics.stats,
-            weeklyData: analytics.weeklyData,
-            trendData: analytics.trendData,
-            insight: analytics.insight,
-            productiveTime: analytics.productiveTime,
-            averageSession: analytics.averageSession
-        });
+            req.identity.userId
 
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({
-            message: "Failed to fetch analytics."
-        });
-    }
+        );
+
+    res.json(analytics);
+
 };
