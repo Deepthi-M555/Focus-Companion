@@ -22,7 +22,16 @@ module.exports.saveSetup = async (req, res) => {
             "Missing required setup fields."
         );
     }
-
+    if (
+        checkInFrequency <= 0 ||
+        snoozeDuration <= 0 ||
+        maxSnoozes < -1
+    ) {
+        throw new ExpressError(
+            400,
+            "Invalid setup values."
+        );
+    }
     const setup =
         await Setup.findOneAndUpdate(
 

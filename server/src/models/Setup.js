@@ -37,6 +37,11 @@ const setupSchema = new mongoose.Schema(
         maxSnoozes: {
             type: Number,
             required: true
+        },
+
+        startupEnabled: {
+            type: Boolean,
+            default: false
         }
     },
     {
