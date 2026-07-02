@@ -1,55 +1,62 @@
+const FocusSession =
+require("../models/FocusSession");
+
 const activeTimers =
 new Map();
 
 /*
   START SESSION TIMER
 
-  After the focus duration
-  expires:
+  Starts a backend timer for the
+  current focus session.
 
-  Trigger a check-in event.
+  When the timer expires:
 
-  Server remains the
-  source of truth.
+  1. Update session status
+  2. Notify frontend
+  3. Remove timer from memory
 */
 
 const startSessionTimer =
 (io, sessionId, duration) => {
-
-  const timer =
-    setTimeout(() => {
-
-      io.to(sessionId).emit(
-
-        "show-check-in",
-
-        {
-
-          sessionId,
-
-          status:
-            "CHECK_IN_REQUIRED"
-
-        }
-
-      );
-
-    },
-
-    duration *
-    60 *
-    1000
-
+    const timer =
+        setTimeout(async () => {
+            try {
+                await FocusSession.findByIdAndUpdate(
+                    sessionId,
+                    {
+                        status:
+                            "check_in_pending"
+                    },
+                    {
+                      new: true
+                    }
+                );
+                io.to(sessionId).emit(
+                    "show-check-in",
+                    {
+                        sessionId,
+                        status:
+                            "CHECK_IN_REQUIRED"
+                    }
+                );
+            } catch (error) {
+                console.error(
+                    "Session Timer Error:",
+                    error
+                );
+            } finally {
+                activeTimers.delete(
+                    sessionId
+                );
+            }
+        },
+        duration * 60 * 1000
+        );
+    activeTimers.set(
+        sessionId,
+        timer
     );
-
-  activeTimers.set(
-
-    sessionId,
-
-    timer
-
-  );
-
 };
 
 /*
@@ -57,42 +64,33 @@ const startSessionTimer =
 
   Used when:
 
-  - Session completes
-  - Session pauses
-  - Session cancels
+  - Session completed
+  - Session failed
+  - Session snoozed
+  - Session cancelled
 
-  Prevents duplicate
-  check-ins.
+  Prevents duplicate timers.
 */
 
 const clearSessionTimer =
 (sessionId) => {
-
-  const timer =
-    activeTimers.get(
-      sessionId
-    );
-
-  if (timer) {
-
-    clearTimeout(
-      timer
-    );
-
-    activeTimers.delete(
-      sessionId
-    );
-
-  }
-
+    const timer =
+        activeTimers.get(
+            sessionId
+        );
+    if (timer) {
+        clearTimeout(
+            timer
+        );
+        activeTimers.delete(
+            sessionId
+        );
+    }
 };
 
 module.exports = {
-
-  startSessionTimer,
-
-  clearSessionTimer
-
+    startSessionTimer,
+    clearSessionTimer
 };
 
 /*
@@ -102,23 +100,21 @@ module.exports = {
             ↓
       Timer Created
             ↓
-     Stored In Map
+     Stored In Memory
             ↓
-      Duration Ends
+      Timer Expires
             ↓
-   show-check-in Event
+  Update Session Status
             ↓
-      Client Popup
+   Emit show-check-in
             ↓
-  User Response Flow
+     Frontend Popup
+            ↓
+     User Responds
 
-  The Backend Controls Time.
+  The backend owns
+  session timing.
 
-  NOT React.
-
-  NOT Electron.
-
-  This makes the server
-  authoritative for
-  focus lifecycle.
+  React only displays
+  the current state.
 */
