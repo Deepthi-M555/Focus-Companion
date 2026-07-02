@@ -1,18 +1,76 @@
-import { useState } from "react";
 import { User, Mail, Lock, Bell, Mic, Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "../theme.jsx";
 import { Switch } from "../components/ui/Switch.jsx";
 import { Button } from "../components/ui/Button.jsx";
 import { Select } from "../components/ui/Select.jsx";
+import { useState, useEffect } from "react";
+import {
+    getSettings,
+    updateSettings,
+    updateProfile,
+    changePassword
+} from "../services/settingsService";
 
 export function Settings() {
   const { theme, toggleTheme } = useTheme();
+  const [profile,setProfile]=useState({
+    name:"",
+    email:""
+  });
   
-  // Fake states for demonstration
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+
+    currentPassword: "",
+
+    newPassword: "",
+
+    confirmPassword: ""
+
+  });
+
+
   const [micEnabled, setMicEnabled] = useState(true);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [overlayEnabled, setOverlayEnabled] = useState(true);
   const [startupEnabled, setStartupEnabled] = useState(false);
+
+  const [checkInFrequency, setCheckInFrequency] = useState("45");
+  const [snoozeDuration, setSnoozeDuration] = useState("5");
+  const [maxSnoozes, setMaxSnoozes] = useState("3");
+  const [savingProfile, setSavingProfile] = useState(false);
+
+const [savingPreferences, setSavingPreferences] = useState(false);
+
+  useEffect(() => {
+    async function loadSettings() {
+        try {
+            const data = await getSettings();
+
+            setProfile({
+                name: data.name || "",
+                email: data.email || ""
+            });
+
+            setMicEnabled(data.micEnabled?? true);
+            setNotificationsEnabled(data.notificationsEnabled?? true);
+            setOverlayEnabled(data.overlayEnabled?? true);
+            setStartupEnabled(data.startupEnabled?? false);
+            setCheckInFrequency(String(data.checkInFrequency??"45"));
+            setSnoozeDuration(String(data.snoozeDuration??"5"));
+            setMaxSnoozes(
+                data.maxSnoozes === -1
+                    ? "unlimited"
+                    : String(data.maxSnoozes ?? "3")
+            );
+
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    loadSettings();
+  }, []);
 
   return (
     <div className="flex-1 overflow-y-auto bg-white dark:bg-[#0a0a0a] p-8 scrollbar-hide">
@@ -47,22 +105,143 @@ export function Settings() {
                   <label className="text-xs font-medium text-neutral-500">Name</label>
                   <div className="flex items-center bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg px-3 py-2">
                     <User className="w-4 h-4 text-neutral-400 mr-2" />
-                    <input type="text" defaultValue="Jane Doe" className="bg-transparent border-none outline-none text-sm w-full" />
+                    <input type="text" value={profile.name} onChange={(e)=> setProfile({...profile, name:e.target.value})}
+                    className="bg-transparent border-none outline-none text-sm w-full"
+                    />
                   </div>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-neutral-500">Email</label>
                   <div className="flex items-center bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg px-3 py-2">
                     <Mail className="w-4 h-4 text-neutral-400 mr-2" />
-                    <input type="email" defaultValue="jane@example.com" className="bg-transparent border-none outline-none text-sm w-full" />
+                    <input type="email" value={profile.email} onChange={(e)=> setProfile({...profile, email:e.target.value})} className="bg-transparent border-none outline-none text-sm w-full" />
                   </div>
                 </div>
               </div>
               <div>
-                <Button variant="outline" className="text-sm h-9">
-                  <Lock className="w-3.5 h-3.5 mr-2" />
+                <Button variant="outline" className="text-sm h-9"onClick={()=>setShowPasswordModal(true)}>
                   Change Password
                 </Button>
+                <div className="pt-4">
+                    <Button
+                    variant="primary"
+                    disabled={savingProfile}
+                    className="w-40"
+                    onClick={async () => {
+                        try {
+                          setSavingProfile(true);
+                          await updateProfile(profile);
+                        } catch (error) {
+                            console.error(error);
+                        } finally {
+                            setSavingProfile(false);
+                        }
+                    }}
+                    >
+                    Save Changes
+                    </Button>
+                </div>
+                {showPasswordModal && (
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+
+                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 w-[420px]">
+
+                        <h2 className="text-xl font-semibold mb-5">
+                            Change Password
+                        </h2>
+
+                        <div className="space-y-4">
+
+                            <input
+                                type="password"
+                                placeholder="Current Password"
+                                value={passwordData.currentPassword}
+                                onChange={(e)=>
+                                    setPasswordData({
+                                        ...passwordData,
+                                        currentPassword:e.target.value
+                                    })
+                                }
+                                className="w-full border rounded-lg p-3 dark:bg-neutral-800"
+                            />
+
+                            <input
+                                type="password"
+                                placeholder="New Password"
+                                value={passwordData.newPassword}
+                                onChange={(e)=>
+                                    setPasswordData({
+                                        ...passwordData,
+                                        newPassword:e.target.value
+                                    })
+                                }
+                                className="w-full border rounded-lg p-3 dark:bg-neutral-800"
+                            />
+
+                            <input
+                                type="password"
+                                placeholder="Confirm Password"
+                                value={passwordData.confirmPassword}
+                                onChange={(e)=>
+                                    setPasswordData({
+                                        ...passwordData,
+                                        confirmPassword:e.target.value
+                                    })
+                                }
+                                className="w-full border rounded-lg p-3 dark:bg-neutral-800"
+                            />
+
+                        </div>
+
+                        <div className="flex justify-end gap-3 mt-6">
+
+                            <Button
+                                variant="outline"
+                                onClick={()=>setShowPasswordModal(false)}
+                            >
+                                Cancel
+                            </Button>
+
+                            <Button
+                              onClick={async () => {
+                                  try {
+                                    if (
+                                        passwordData.newPassword !==
+                                        passwordData.confirmPassword
+                                    ) {
+                                        return;
+                                    }
+                                      await changePassword(
+                                          passwordData
+                                      );
+                                      alert(
+                                          "Password changed successfully."
+                                      );
+                                      setPasswordData({
+                                          currentPassword:"",
+                                          newPassword:"",
+                                          confirmPassword:""
+                                      });
+                                      setShowPasswordModal(false);
+                                  }
+                                  catch(error){
+                                      console.error(error);
+                                      alert(
+                                          error?.response?.data?.error?.message ||
+                                          "Failed to change password."
+                                      );
+                                  }
+                              }}
+                          >
+                              Save
+                          </Button>
+
+                        </div>
+
+                    </div>
+
+                </div>
+                )}
               </div>
             </div>
           </div>
@@ -75,7 +254,7 @@ export function Settings() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="text-sm font-medium">Default Check-In Frequency</label>
-              <Select defaultValue="45">
+              <Select value={checkInFrequency} onChange={(e) => setCheckInFrequency(e.target.value)}>
                 <option value="25">Every 25 minutes</option>
                 <option value="45">Every 45 minutes</option>
                 <option value="60">Every 60 minutes</option>
@@ -85,7 +264,12 @@ export function Settings() {
             
             <div className="space-y-2">
               <label className="text-sm font-medium">Snooze Duration</label>
-              <Select defaultValue="5">
+              <Select
+                  value={snoozeDuration}
+                  onChange={(e) =>
+                      setSnoozeDuration(e.target.value)
+                  }
+              >
                 <option value="2">2 minutes</option>
                 <option value="5">5 minutes</option>
                 <option value="10">10 minutes</option>
@@ -94,7 +278,12 @@ export function Settings() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Maximum Snoozes</label>
-              <Select defaultValue="3">
+              <Select
+                  value={maxSnoozes}
+                  onChange={(e) =>
+                      setMaxSnoozes(e.target.value)
+                  }
+              >
                 <option value="1">1 time</option>
                 <option value="3">3 times</option>
                 <option value="5">5 times</option>
@@ -162,6 +351,33 @@ export function Settings() {
             </div>
           </div>
         </section>
+
+        <div className="flex justify-end">
+            <Button
+                className="mt-6"
+                disabled={savingPreferences}
+                onClick={async () => {
+                    try {
+                      setSavingPreferences(true);
+                        await updateSettings({
+                            micEnabled,
+                            notificationsEnabled,
+                            overlayEnabled,
+                            startupEnabled,
+                            checkInFrequency,
+                            snoozeDuration,
+                            maxSnoozes
+                        });
+                    } catch (error) {
+                        console.error(error);
+                    } finally {
+                        setSavingPreferences(false);
+                    }
+                }}
+            >
+                Save Preferences
+            </Button>
+        </div>
 
         {/* Appearance */}
         <section className="space-y-6">

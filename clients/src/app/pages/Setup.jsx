@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";import { motion } from "motion/react";
 import { Mic, Bell, Monitor, Settings } from "lucide-react";
 import { Button } from "../components/ui/Button.jsx";
@@ -8,27 +8,110 @@ import { RadioGroup, RadioGroupItem } from "../components/ui/RadioGroup.jsx";
 import { Select } from "../components/ui/Select.jsx";
 import { Input } from "../components/ui/Input.jsx";
 
-import { saveSetup } from "../services/setupService";
-
+import {saveSetup, getSetup}from "../services/setupService";
 export function Setup() {
   const navigate = useNavigate();
 
   const [frequency, setFrequency] = useState("30");
   const [customFrequency, setCustomFrequency] = useState("");
 
+  const [micEnabled, setMicEnabled] = useState(true);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [overlayEnabled, setOverlayEnabled] = useState(true);
+  const [snoozeDuration, setSnoozeDuration] = useState("5");
+  const [maxSnoozes, setMaxSnoozes] = useState("3");
+  
+  useEffect(() => {
+    const loadSetup = async () => {
+        try {
+            const response =
+                await getSetup();
+            if (!response.setup) {
+                return;
+            }
+            const setup =
+                response.setup;
+            setMicEnabled(
+                setup.micEnabled
+            );
+
+            setNotificationsEnabled(
+                setup.notificationsEnabled
+            );
+
+            setOverlayEnabled(
+                setup.overlayEnabled
+            );
+
+            const predefined = ["15","30","45"];
+              if (
+                  predefined.includes(
+                      String(setup.checkInFrequency)
+                  )
+              ){
+                  setFrequency(
+                      String(setup.checkInFrequency)
+                  );
+              }else{
+
+                  setFrequency("custom");
+
+                  setCustomFrequency(
+                      String(setup.checkInFrequency)
+                  );
+              }
+
+            setSnoozeDuration(
+                String(
+                    setup.snoozeDuration
+                )
+            );
+
+            setMaxSnoozes(
+                setup.maxSnoozes === -1
+
+                    ? "unlimited"
+
+                    : String(
+                        setup.maxSnoozes
+                    )
+            );
+        }
+        catch (error) {
+            console.error(
+                "Failed to load setup",
+                error
+            );
+        }
+    };
+    loadSetup();
+  }, []);
+
   const handleFinish = async (e) => {
     e.preventDefault();
+    if (
+      frequency === "custom" &&
+      !customFrequency.trim()
+    ) {
+        alert("Please enter a custom check-in interval.");
+    return;
+    }
     try {
         await saveSetup({
-            microphone: true,
-            notifications: true,
-            overlay: true,
-            frequency:
+            micEnabled,
+            notificationsEnabled,
+            overlayEnabled,
+
+            checkInFrequency:
                 frequency === "custom"
                     ? Number(customFrequency)
                     : Number(frequency),
-            snoozeDuration: 5,
-            maxSnoozes: 3
+
+            snoozeDuration: Number(snoozeDuration),
+            maxSnoozes:
+                maxSnoozes === "unlimited"
+                    ? -1
+                    : Number(maxSnoozes)
         });
         navigate("/dashboard");
     }
@@ -70,7 +153,7 @@ export function Setup() {
                     <p className="text-sm text-neutral-500 dark:text-neutral-400">Required for voice interactions with FYNIX.</p>
                   </div>
                 </div>
-                <Switch defaultChecked />
+                <Switch checked={micEnabled} onCheckedChange={setMicEnabled} />
               </div>
 
               <div className="flex items-center justify-between p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800">
@@ -83,7 +166,7 @@ export function Setup() {
                     <p className="text-sm text-neutral-500 dark:text-neutral-400">Get gentle nudges for focus blocks and breaks.</p>
                   </div>
                 </div>
-                <Switch defaultChecked />
+                <Switch checked={notificationsEnabled} onCheckedChange={setNotificationsEnabled} />
               </div>
 
               <div className="flex items-center justify-between p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800">
@@ -96,7 +179,7 @@ export function Setup() {
                     <p className="text-sm text-neutral-500 dark:text-neutral-400">Keep your current task visible at all times.</p>
                   </div>
                 </div>
-                <Switch defaultChecked />
+                <Switch checked={overlayEnabled} onCheckedChange={setOverlayEnabled} />
               </div>
             </div>
           </section>
@@ -146,7 +229,7 @@ export function Setup() {
             <div className="grid grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label>Snooze Duration</Label>
-                <Select defaultValue="5">
+                <Select value={snoozeDuration} onValueChange={(e) => setSnoozeDuration(e.target.value)}>
                   <option value="5">5 minutes</option>
                   <option value="10">10 minutes</option>
                   <option value="15">15 minutes</option>
@@ -154,7 +237,7 @@ export function Setup() {
               </div>
               <div className="space-y-2">
                 <Label>Maximum Snoozes</Label>
-                <Select defaultValue="3">
+                <Select value={maxSnoozes} onValueChange={(e) => setMaxSnoozes(e.target.value)}>
                   <option value="1">1 time</option>
                   <option value="2">2 times</option>
                   <option value="3">3 times</option>
