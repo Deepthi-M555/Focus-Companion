@@ -6,7 +6,6 @@ require("../utils/ExpressError");
 
 module.exports.createTask =
 async (req, res) => {
-
   const {
     title,
     description,
@@ -28,10 +27,7 @@ async (req, res) => {
 
   const task =
     await Task.create({
-
-      user:
-        req.identity.userId,
-
+    userId: req.identity.userId,
       title,
       description,
       priority,

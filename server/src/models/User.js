@@ -13,6 +13,11 @@ const userSchema = new mongoose.Schema({
         required: true,
         minlength: 8
     },
+    name: {
+        type: String,
+        default: "",
+        trim: true
+    },
     activeSessionId:{
         type: String,
         default: null
