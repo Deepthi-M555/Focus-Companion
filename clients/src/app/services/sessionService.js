@@ -1,28 +1,57 @@
 import api from "./api";
 
-export async function startSession() {
+export async function startSession(data) {
 
-    const response =
+    const { data: response } =
         await api.post(
-            "/session/start"
+            "/sessions/start",
+            data
         );
 
-    return response.data;
+    return response;
 
 }
 
-export async function pauseSession() {
+export async function completeSession(sessionId) {
 
-    return api.patch(
-        "/session/pause"
-    );
+    const { data } =
+        await api.post(
+            `/sessions/complete/${sessionId}`
+        );
+
+    return data;
 
 }
 
-export async function completeSession() {
+export async function failSession(sessionId) {
 
-    return api.patch(
-        "/session/complete"
-    );
+    const { data } =
+        await api.post(
+            `/sessions/fail/${sessionId}`
+        );
+
+    return data;
+
+}
+
+export async function snoozeSession(sessionId) {
+
+    const { data } =
+        await api.post(
+            `/sessions/snooze/${sessionId}`
+        );
+
+    return data;
+
+}
+
+export async function resumeSession() {
+
+    const { data } =
+        await api.get(
+            "/sessions/resume"
+        );
+
+    return data;
 
 }
