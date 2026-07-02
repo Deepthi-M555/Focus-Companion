@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { Play, ArrowRight, RotateCcw, Clock, AlertCircle } from "lucide-react";
 import { Button } from "../components/ui/Button.jsx";
 
+import { recoverSchedule } from "../services/recoveryService";
+
 export function Recovery() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
@@ -29,13 +31,20 @@ export function Recovery() {
             </div>
             
             <h2 className="text-2xl font-medium mb-2">Session Missed</h2>
-            <p className="text-neutral-500 mb-8 leading-relaxed">
-              It looks like you didn't check in. Life happens. How would you like to handle the rest of your schedule?
-            </p>
-
-            <div className="space-y-3">
-              <button 
-                onClick={() => setStep(2)}
+                <p className="text-neutral-500 mb-8 leading-relaxed">
+                  It looks like you didn't check in. Life happens. How would you like to handle the rest of your schedule?
+                </p>
+                <div className="space-y-3">
+                  <button 
+                    onClick={async () => {
+                        const response =
+                            await recoverSchedule({
+                                reason:
+                                    "MISSED_SESSION"
+                            });
+                        console.log(response);
+                        setStep(2);
+                    }}
                 className="w-full p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 hover:border-blue-500 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all flex items-center justify-between group"
               >
                 <div className="text-left">
@@ -46,7 +55,7 @@ export function Recovery() {
               </button>
               
               <button 
-                onClick={() => navigate("/dashboard")}
+                onClick={() => navigate("/focus")}
                 className="w-full p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-all flex items-center justify-between group"
               >
                 <div className="text-left">
