@@ -11,17 +11,30 @@ import {
   Clock
 } from "lucide-react";
 import { Button } from "../components/ui/Button.jsx";
+import { useEffect } from "react";
+import { getSchedule } from "../services/scheduleService";
 
 export function Timetable() {
   const navigate = useNavigate();
 
-  const [blocks, setBlocks] = useState([
-    { id: "1", title: "DSA: Trees & Graphs", time: "09:00 AM", duration: 90, type: "focus", color: "bg-blue-500" },
-    { id: "2", title: "Mindful Break", time: "10:30 AM", duration: 15, type: "break", color: "bg-purple-500" },
-    { id: "3", title: "OS: Memory Management", time: "10:45 AM", duration: 75, type: "focus", color: "bg-emerald-500" },
-    { id: "4", title: "Lunch & Walk", time: "12:00 PM", duration: 60, type: "fixed", color: "bg-orange-500" },
-    { id: "5", title: "Review Notes", time: "01:00 PM", duration: 30, type: "flex", color: "bg-neutral-500" },
-  ]);
+  const [blocks, setBlocks] = useState([]);
+
+  const [showDialog,setShowDialog]=useState(false);
+
+  const [newBlock,setNewBlock]=useState({ title:"", time:"", duration:"",type:"focus"});
+  
+  useEffect(() => {
+    async function loadSchedule() {
+        try {
+            const response = await getSchedule();
+            setBlocks(response.schedule);
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    loadSchedule();
+}, []);
 
   return (
     <div className="flex-1 flex flex-col h-full bg-white dark:bg-[#0a0a0a] overflow-hidden">
@@ -121,10 +134,119 @@ export function Timetable() {
           ))}
           
           <div className="pt-6 flex justify-center">
-            <Button variant="ghost" className="text-neutral-500 border border-dashed border-neutral-300 dark:border-neutral-700 w-full h-14 rounded-2xl hover:border-blue-500 hover:text-blue-500 dark:hover:border-blue-500 transition-colors" onClick={() => alert("Add Block Dialog - Coming Soon")}>
+            <Button variant="ghost" className="text-neutral-500 border border-dashed border-neutral-300 dark:border-neutral-700 w-full h-14 rounded-2xl hover:border-blue-500 hover:text-blue-500 dark:hover:border-blue-500 transition-colors" onClick={()=>setShowDialog(true)}>
               + Add Custom Block
             </Button>
           </div>
+
+          {showDialog && (
+
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+
+          <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 w-96 space-y-4">
+
+          <h2 className="text-xl font-semibold">
+          Add Block
+          </h2>
+
+          <Input
+          placeholder="Task Name"
+          value={newBlock.title}
+          onChange={(e)=>
+          setNewBlock({
+          ...newBlock,
+          title:e.target.value
+          })
+          }
+          />
+
+          <Input
+          type="time"
+          value={newBlock.time}
+          onChange={(e)=>
+          setNewBlock({
+          ...newBlock,
+          time:e.target.value
+          })
+          }
+          />
+
+          <Input
+          type="number"
+          placeholder="Duration"
+          value={newBlock.duration}
+          onChange={(e)=>
+          setNewBlock({
+          ...newBlock,
+          duration:e.target.value
+          })
+          }
+          />
+
+          <Select
+          value={newBlock.type}
+          onChange={(e)=>
+          setNewBlock({
+          ...newBlock,
+          type:e.target.value
+          })
+          }
+          >
+
+          <option value="focus">
+          Focus
+          </option>
+
+          <option value="break">
+          Break
+          </option>
+
+          <option value="fixed">
+          Fixed
+          </option>
+
+          </Select>
+
+          <div className="flex justify-end gap-3">
+
+          <Button
+          variant="outline"
+          onClick={()=>setShowDialog(false)}
+          >
+
+          Cancel
+
+          </Button>
+
+          <Button
+          onClick={()=>{
+          setBlocks([
+          ...blocks,
+
+          {
+          id:Date.now().toString(),
+          ...newBlock,
+          color:"bg-blue-500"
+          }
+
+          ]);
+
+          setShowDialog(false);
+
+          }}
+          >
+
+          Save
+
+          </Button>
+
+          </div>
+
+          </div>
+
+          </div>
+
+          )}
 
         </div>
       </div>
