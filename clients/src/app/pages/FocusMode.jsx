@@ -6,9 +6,16 @@ import { Button } from "../components/ui/Button.jsx";
 
 import {
     startSession,
-    pauseSession,
-    completeSession
+    completeSession,
+    snoozeSession,
+    failSession,
+    resumeSession
 } from "../services/sessionService";
+
+import socket, {
+    connectSocket,
+    disconnectSocket
+} from "../services/socketService";
 
 export function FocusMode() {
   const navigate = useNavigate();
@@ -16,6 +23,7 @@ export function FocusMode() {
   const [isPaused, setIsPaused] = useState(false);
   const [timeLeft, setTimeLeft] = useState(45 * 60); // 45 minutes
   const [showCheckIn, setShowCheckIn] = useState(false);
+  const [sessionId, setSessionId] = useState(null);
   const [checkInStatus, setCheckInStatus] = useState(null);
 
   // Formatting time
@@ -25,20 +33,15 @@ export function FocusMode() {
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
-  const handlePause = async () => {
-    try{
-        await pauseSession();
-        setIsPaused(
-            prev=>!prev
-        );
-    }
-    catch(error){
-        console.error(error);
-    }
-};
+  const handlePause = () => {
+    setIsPaused(prev => !prev);
+  };
 
   const handleComplete = async () => {
-    await completeSession();
+    if (!sessionId) return;
+    await completeSession(
+        sessionId
+    );
     navigate("/dashboard");
   };
 
@@ -51,25 +54,97 @@ export function FocusMode() {
     }
   }, [isPaused, timeLeft]);
 
-  // Simulate a check-in after a few seconds for demonstration
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowCheckIn(true);
-      setCheckInStatus("listening");
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, []);
   useEffect(() => {
     async function beginSession() {
+    try {
+        const response =
+            await startSession({
+                taskId:
+                    "YOUR_TASK_ID",
+                duration: 45,
+                mode
+            });
+        setSessionId(
+            response.session._id
+        );
+        connectSocket();
+
+        socket.emit(
+            "join_focus_session",
+            response.session._id
+        );
+    }
+    catch (error) {
+        console.error(error);
+    }
+  }
+    beginSession();
+  }, []);
+
+  useEffect(() => {
+    async function restoreSession() {
         try {
-            await startSession();
-        } catch (error) {
+            const response =
+                await resumeSession();
+            if (!response.session) {
+                return;
+            }
+            setSessionId(
+                response.session._id
+            );
+
+            connectSocket();
+
+            socket.emit(
+                "join_focus_session",
+                response.session._id
+            );
+        }
+        catch (error) {
             console.error(error);
         }
     }
-
-    beginSession();
+    restoreSession();
   }, []);
+
+  useEffect(() => {
+    return () => {
+        disconnectSocket();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!sessionId) {
+        return;
+    }
+    const interval =
+        setInterval(() => {
+            socket.emit(
+                "heartbeat",
+
+                {
+                    sessionId
+                }
+            );
+        },30000);
+    return () => {
+
+        clearInterval(interval);
+    };
+  },[sessionId]);
+
+  useEffect(() => {
+    socket.on(
+        "show-check-in",
+        () => {
+            setShowCheckIn(true);
+            setCheckInStatus("listening");
+        }
+    );
+    return () => {
+        socket.off("show-check-in");
+    };
+  },[]);
 
   const progress = ((45 * 60 - timeLeft) / (45 * 60)) * 100;
   const strokeDashoffset = 283 - (283 * progress) / 100;
@@ -257,16 +332,44 @@ export function FocusMode() {
                 <Button 
                   className="flex-1" 
                   variant="primary"
-                  onClick={() => setShowCheckIn(false)}
+                  onClick={async () => {
+                      if(sessionId){
+                          await completeSession(sessionId);
+                          socket.emit(
+                              "voice-response",
+                              {
+                                  sessionId,
+                                  transcript:"completed",
+                                  currentState:"CHECK_IN_PENDING"
+                              }
+                          );
+                      }
+                      setShowCheckIn(false);
+                      navigate("/dashboard");
+                  }}
+
                 >
                   Yes
                 </Button>
                 <Button 
                   className="flex-1" 
                   variant="outline"
-                  onClick={() => {
-                    setCheckInStatus("snoozed");
-                    setTimeout(() => setShowCheckIn(false), 1000);
+                  onClick={async () => {
+                      if (sessionId) {
+                          await snoozeSession(sessionId);
+                          socket.emit(
+                              "voice-response",
+                              {
+                                  sessionId,
+                                  transcript:"snooze",
+                                  currentState:"CHECK_IN_PENDING"
+                              }
+                          );
+                      }
+                      setCheckInStatus("snoozed");
+                      setTimeout(() => {
+                          setShowCheckIn(false);
+                      },1000);
                   }}
                 >
                   Snooze
@@ -274,7 +377,15 @@ export function FocusMode() {
               </div>
 
               <button 
-                onClick={() => navigate("/recovery")}
+                onClick={async () => {
+                    if (sessionId) {
+                        await failSession(sessionId);
+                    }
+                    navigate(
+                    "/recovery"
+                    );
+                  }
+                }
                 className="mt-6 text-sm text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 transition-colors"
               >
                 No, I missed it...

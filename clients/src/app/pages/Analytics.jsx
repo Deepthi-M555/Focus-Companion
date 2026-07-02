@@ -12,38 +12,48 @@ export function Analytics() {
   const [productiveTime, setProductiveTime] = useState("");
   const [averageSession, setAverageSession] = useState("");
   const [loading, setLoading] = useState(true);
-  
+  const [error, setError] = useState("");
+
   useEffect(() => {
-
     async function loadAnalytics() {
-
-        try {
-
-            const data = await getAnalytics();
-
-            setStats(data.stats);
-
-            setWeeklyData(data.weeklyData);
-
-            setTrendData(data.trendData);
-
-            setInsight(data.insight);
-
-            setProductiveTime(data.productiveTime);
-
-            setAverageSession(data.averageSession);
-
-        } catch (error) {
-
-            console.error(error);
-
-        }
-
+      try {
+        const data = await getAnalytics();
+        setStats(data.stats);
+        setWeeklyData(data.weeklyData);
+        setTrendData(data.trendData);
+        setInsight(data.insight);
+        setProductiveTime(data.productiveTime);
+        setAverageSession(data.averageSession);
+      } catch (error) {
+        console.error(error);
+        setError("Unable to load analytics.");
+      } finally {
+        setLoading(false);
+      }
     }
 
     loadAnalytics();
-
   }, []);
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-neutral-500">
+          Loading analytics...
+        </p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-red-500">
+          {error}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-y-auto bg-white dark:bg-[#0a0a0a] p-8 scrollbar-hide relative">
