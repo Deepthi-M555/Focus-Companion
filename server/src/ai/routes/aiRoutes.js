@@ -32,5 +32,13 @@ router.post(
     wrapAsync(aiController.chat)
 );
 
+router.post(
+    "/study-goal",
+    aiGuardrail,
+    wrapAsync(
+        aiController.addStudyGoal
+    )
+);
+
 module.exports =
     router;

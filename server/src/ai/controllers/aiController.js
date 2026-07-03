@@ -199,3 +199,85 @@ exports.chat = async (
     }
 
 };
+
+exports.addStudyGoal = async (
+
+    req,
+
+    res
+
+) => {
+
+    const {
+
+        message,
+
+        existingTasks = []
+
+    } = req.body;
+
+    const settings =
+        await CompanionSettings.findOne({
+
+            userId:
+                req.user._id
+
+        });
+
+    const personality =
+        settings?.personality ||
+        "GENTLE";
+
+    const prompt =
+        buildPrompt({
+
+            userMessage:
+                `
+Current timetable:
+
+${JSON.stringify(existingTasks)}
+
+User request:
+
+${message}
+
+Merge the new study goal into the existing timetable.
+Return ONLY the updated study tasks.
+`,
+
+            personality,
+
+            analytics: {},
+
+            behaviorInsights: {}
+
+        });
+
+    const aiResponse =
+        await generateResponse(
+            prompt
+        );
+
+    const mergedTasks = [
+
+        ...existingTasks,
+
+        ...(aiResponse.data.tasks || [])
+
+    ];
+
+    const schedule =
+        generateSchedule(
+            mergedTasks
+        );
+
+    res.json({
+
+        message:
+            aiResponse.message,
+
+        schedule
+
+    });
+
+};
