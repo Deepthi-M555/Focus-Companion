@@ -13,16 +13,13 @@ import {
 import { Button } from "../components/ui/Button.jsx";
 import { useEffect } from "react";
 import { getSchedule } from "../services/scheduleService";
+import { saveSchedule } from "../services/taskService";
 
 export function Timetable() {
   const navigate = useNavigate();
 
   const [blocks, setBlocks] = useState([]);
 
-  const [showDialog,setShowDialog]=useState(false);
-
-  const [newBlock,setNewBlock]=useState({ title:"", time:"", duration:"",type:"focus"});
-  
   useEffect(() => {
     async function loadSchedule() {
         try {
@@ -133,120 +130,29 @@ export function Timetable() {
             </motion.div>
           ))}
           
-          <div className="pt-6 flex justify-center">
-            <Button variant="ghost" className="text-neutral-500 border border-dashed border-neutral-300 dark:border-neutral-700 w-full h-14 rounded-2xl hover:border-blue-500 hover:text-blue-500 dark:hover:border-blue-500 transition-colors" onClick={()=>setShowDialog(true)}>
-              + Add Custom Block
+          <div className="pt-8 flex gap-4">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => navigate("/dashboard")}
+            >
+              + Add Study Goal
+            </Button>
+
+            <Button
+              variant="primary"
+              className="flex-1"
+              onClick={async () => {
+                await saveSchedule({
+                  tasks: blocks
+                });
+
+                navigate("/focus");
+              }}
+            >
+              Start Work
             </Button>
           </div>
-
-          {showDialog && (
-
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-
-          <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 w-96 space-y-4">
-
-          <h2 className="text-xl font-semibold">
-          Add Block
-          </h2>
-
-          <Input
-          placeholder="Task Name"
-          value={newBlock.title}
-          onChange={(e)=>
-          setNewBlock({
-          ...newBlock,
-          title:e.target.value
-          })
-          }
-          />
-
-          <Input
-          type="time"
-          value={newBlock.time}
-          onChange={(e)=>
-          setNewBlock({
-          ...newBlock,
-          time:e.target.value
-          })
-          }
-          />
-
-          <Input
-          type="number"
-          placeholder="Duration"
-          value={newBlock.duration}
-          onChange={(e)=>
-          setNewBlock({
-          ...newBlock,
-          duration:e.target.value
-          })
-          }
-          />
-
-          <Select
-          value={newBlock.type}
-          onChange={(e)=>
-          setNewBlock({
-          ...newBlock,
-          type:e.target.value
-          })
-          }
-          >
-
-          <option value="focus">
-          Focus
-          </option>
-
-          <option value="break">
-          Break
-          </option>
-
-          <option value="fixed">
-          Fixed
-          </option>
-
-          </Select>
-
-          <div className="flex justify-end gap-3">
-
-          <Button
-          variant="outline"
-          onClick={()=>setShowDialog(false)}
-          >
-
-          Cancel
-
-          </Button>
-
-          <Button
-          onClick={()=>{
-          setBlocks([
-          ...blocks,
-
-          {
-          id:Date.now().toString(),
-          ...newBlock,
-          color:"bg-blue-500"
-          }
-
-          ]);
-
-          setShowDialog(false);
-
-          }}
-          >
-
-          Save
-
-          </Button>
-
-          </div>
-
-          </div>
-
-          </div>
-
-          )}
 
         </div>
       </div>
