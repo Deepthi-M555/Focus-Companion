@@ -11,8 +11,8 @@ const setupRoutes = require("./routes/setupRoutes");
 const settingsRoutes = require("./routes/settingsRoutes");
 
 const aiRoutes = require("./ai/routes/aiRoutes");
-const voiceRoutes = require("./voice/routes/voiceRoutes");
-const voiceRoutes = require("./ai/routes/voiceRoutes");
+const aiVoiceRoutes = require("./ai/routes/voiceRoutes");
+const focusVoiceRoutes = require("./voice/routes/voiceRoutes");
 const { isLoggedIn } = require("./middleware/authMiddleware");
 const errorMiddleware = require("./middleware/errorMiddleware");
 const app = express();
@@ -37,8 +37,8 @@ app.use("/api/setup", setupRoutes);
 app.use("/api/settings", settingsRoutes);
 
 app.use("/api/ai",aiRoutes);
-app.use("/api/voice", voiceRoutes);
-app.use("/api/voice",voiceRoutes);
+app.use("/api/ai/voice", aiVoiceRoutes);
+app.use("/api/voice", focusVoiceRoutes);
 
 app.get("/", (req, res) => {
   res.send("Focus Companion API Running");
