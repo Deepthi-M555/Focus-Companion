@@ -42,3 +42,72 @@ async (req, res) => {
   });
 
 };
+
+const {
+
+    saveSchedule,
+
+    loadTodaySchedule
+
+} = require(
+
+    "../services/taskService"
+
+);
+
+module.exports.saveSchedule =
+async (
+
+    req,
+
+    res
+
+) => {
+
+    const savedTasks =
+        await saveSchedule({
+
+            userId:
+                req.identity.userId,
+
+            tasks:
+                req.body.tasks
+
+        });
+
+    res.json({
+
+        message:
+            "Timetable saved.",
+
+        tasks:
+            savedTasks
+
+    });
+
+};
+
+module.exports.loadSchedule =
+async (
+
+    req,
+
+    res
+
+) => {
+
+    const tasks =
+        await loadTodaySchedule(
+
+            req.identity.userId
+
+        );
+
+    res.json({
+
+        schedule:
+            tasks
+
+    });
+
+};

@@ -3,7 +3,9 @@ const express = require("express");
 const router = express.Router();
 
 const {
-  createTask
+  createTask,
+  saveSchedule,
+  loadSchedule
 } = require("../controllers/taskController");
 
 const {
@@ -17,6 +19,22 @@ router.post(
   "/",
   isLoggedIn,
   wrapAsync(createTask)
+);
+
+router.post(
+  "/save",
+  isLoggedIn,
+  wrapAsync(
+    saveSchedule
+  )
+);
+
+router.get(
+  "/today",
+  isLoggedIn,
+  wrapAsync(
+    loadSchedule
+  )
 );
 
 module.exports = router;
