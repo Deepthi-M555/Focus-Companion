@@ -14,12 +14,13 @@ const {
 );
 
 const {
-  startSession,
-  completeSession,
-  failSession,
-  snoozeSession
+    startSession,
+    completeSession,
+    failSession,
+    snoozeSession,
+    resumeActiveSession
 } = require(
-  "../controllers/sessionController"
+    "../controllers/sessionController"
 );
 
 router.post(
@@ -44,6 +45,12 @@ router.post(
   "/snooze/:id",
   isLoggedIn,
   wrapAsync(snoozeSession)
+);
+
+router.get(
+    "/resume",
+    isLoggedIn,
+    wrapAsync(resumeActiveSession)
 );
 
 module.exports = router;
