@@ -1,58 +1,60 @@
 const STATES = {
 
-    IDLE: "IDLE",
+    IDLE: "idle",
 
-    ACTIVE: "ACTIVE",
+    ACTIVE: "active",
 
     CHECK_IN_PENDING:
-        "CHECK_IN_PENDING",
+        "check_in_pending",
 
-    SNOOZED: "SNOOZED",
+    SNOOZED: "snoozed",
 
-    COMPLETED: "COMPLETED",
+    COMPLETED: "completed",
 
     RECOVERY_ENGINE:
-        "RECOVERY_ENGINE"
+        "recovery"
 
 };
 
 const transitions = {
 
-    IDLE: [
+    idle: [
 
-        "ACTIVE"
-
-    ],
-
-    ACTIVE: [
-
-        "CHECK_IN_PENDING"
+        "active"
 
     ],
 
-    CHECK_IN_PENDING: [
+    active: [
 
-        "COMPLETED",
-
-        "SNOOZED",
-
-        "RECOVERY_ENGINE"
+        "check_in_pending"
 
     ],
 
-    SNOOZED: [
+    check_in_pending: [
 
-        "ACTIVE",
+        "completed",
 
-        "RECOVERY_ENGINE"
+        "snoozed",
+
+        "recovery"
 
     ],
 
-    RECOVERY_ENGINE: [
+    snoozed: [
 
-        "ACTIVE",
+        "active",
 
-        "COMPLETED"
+        "check_in_pending",
+
+        "recovery"
+
+    ],
+
+    recovery: [
+
+        "active",
+
+        "completed"
 
     ]
 
