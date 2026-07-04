@@ -1,69 +1,102 @@
 const mongoose =
-    require("mongoose");
+require("mongoose");
 
 const companionSettingsSchema =
-    new mongoose.Schema({
+new mongoose.Schema({
 
-        userId: {
+    userId: {
 
-            type:
-                mongoose.Schema.Types.ObjectId,
+        type:
+            mongoose.Schema.Types.ObjectId,
 
-            ref:
-                "User",
+        ref:
+            "User",
 
-            required:
-                true
+        required:
+            true
 
-        },
+    },
 
-        personality: {
+    personality: {
 
-            type:
-                String,
+        type:
+            String,
 
-            enum: [
+        enum: [
 
-                "STRICT",
+            "GENTLE",
 
-                "GENTLE",
+            "STRICT"
 
-                "MOTIVATIONAL",
+        ],
 
-                "ANALYTICAL"
+        default:
+            "GENTLE"
 
-            ],
+    },
 
-            default:
-                "GENTLE"
+    voiceEnabled: {
 
-        },
+        type:
+            Boolean,
 
-        voiceEnabled: {
+        default:
+            true
 
-            type:
-                Boolean,
+    },
 
-            default:
-                true
+    notificationsEnabled: {
 
-        },
+        type:
+            Boolean,
 
-        notificationsEnabled: {
+        default:
+            true
 
-            type:
-                Boolean,
+    },
 
-            default:
-                true
+    checkInInterval: {
 
-        }
+        type:
+            Number,
 
-    }, {
+        default:
+            15
 
-        timestamps: true
+    },
 
-    });
+    voiceResponseTimeout: {
+
+        type:
+            Number,
+
+        default:
+            60
+
+    },
+
+    snoozeDuration: {
+
+        type:
+            Number,
+
+        default:
+            10
+
+    },
+
+    maxSnoozes: {
+        type:
+            Number,
+        default:
+            3
+    }
+
+}, {
+
+    timestamps: true
+
+});
 
 companionSettingsSchema.index(
     { userId: 1 },
@@ -71,10 +104,10 @@ companionSettingsSchema.index(
 );
 
 module.exports =
-    mongoose.model(
+mongoose.model(
 
-        "CompanionSettings",
+    "CompanionSettings",
 
-        companionSettingsSchema
+    companionSettingsSchema
 
-    );
+);
