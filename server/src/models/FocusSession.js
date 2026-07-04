@@ -37,9 +37,11 @@ new mongoose.Schema({
       "scheduled",
       "active",
       "check_in_pending",
+      "recovery",
       "completed",
       "failed",
-      "snoozed"
+      "snoozed",
+      "paused"
     ],
     default: "scheduled"
   },
@@ -55,6 +57,11 @@ new mongoose.Schema({
   },
 
   distractionCount: {
+    type: Number,
+    default: 0
+  },
+
+  snoozeCount: {
     type: Number,
     default: 0
   },
