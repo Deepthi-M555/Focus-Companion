@@ -18,7 +18,10 @@ const {
     completeSession,
     failSession,
     snoozeSession,
-    resumeActiveSession
+    resumeActiveSession,
+    pauseSession,
+    resumePausedSession,
+    skipSession
 } = require(
     "../controllers/sessionController"
 );
@@ -51,6 +54,30 @@ router.get(
     "/resume",
     isLoggedIn,
     wrapAsync(resumeActiveSession)
+);
+
+router.post(
+  "/pause/:id",
+  isLoggedIn,
+  wrapAsync(
+    pauseSession
+  )
+);
+
+router.post(
+  "/resume/:id",
+  isLoggedIn,
+  wrapAsync(
+    resumePausedSession
+  )
+);
+
+router.post(
+  "/skip/:id",
+  isLoggedIn,
+  wrapAsync(
+    skipSession
+  )
 );
 
 module.exports = router;

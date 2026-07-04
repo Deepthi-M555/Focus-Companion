@@ -1,6 +1,12 @@
 const FocusSession =
 require("../models/FocusSession");
 
+const Task =
+require("../models/Task");
+
+const CompanionSettings =
+require("../models/CompanionSettings");
+
 const SessionEvent =
 require("../models/SessionEvent");
 
@@ -41,6 +47,15 @@ async (req, res) => {
       status: "active",
       startedAt: new Date()
     });
+
+    await Task.findByIdAndUpdate(
+      taskId,
+      {
+        status:
+          "in_progress"
+      }
+    );
+
     await SessionEvent.create({
     session: session._id,
     user: req.identity.userId,
@@ -87,24 +102,52 @@ async (req, res) => {
 session.actualDuration = actualDuration;
   await session.save();
 
+  await Task.findByIdAndUpdate(
+
+      session.task,
+
+      {
+
+          status:
+          "completed",
+
+          completed:true
+
+      }
+
+  );
+
   clearSessionTimer(
       session._id.toString()
   );
+
   await SessionEvent.create({
-      session: session._id,
-      user: session.user,
-      type: "SESSION_COMPLETE",
-      metadata: {
+
+      session:
+      session._id,
+
+      user:
+      session.user,
+
+      type:
+      "SESSION_COMPLETE",
+
+      metadata:{
+
           actualDuration,
-          completedAt:
-              new Date()
+
+          completedAt:new Date()
+
       }
+
   });
 
   res.json({
-    message:
-      "Session completed",
-    session
+
+      action:"COMPLETE",
+
+      session
+
   });
 };
 
@@ -149,38 +192,120 @@ async (req, res) => {
 
 
 module.exports.snoozeSession =
-async (req, res) => {
-    const session =
-      await FocusSession.findOne({
-          _id: req.params.id,
-          user: req.identity.userId
-      });
+async (req,res)=>{
 
-  if (!session) {
-    throw new ExpressError(
-      404,
-      "Session not found"
+    const session =
+    await FocusSession.findById(
+        req.params.id
     );
-  }
-  session.status = "snoozed";
-  await session.save();
-  clearSessionTimer(
-      session._id.toString()
-  );
-  await SessionEvent.create({
-      session: session._id,
-      user: session.user,
-      type: "SNOOZE",
-      metadata: {
-        snoozedAt:
-            new Date()
-      }
-  });
-  res.json({
-    message:
-      "Session snoozed",
-    session
-  });
+
+    if(!session){
+
+        throw new ExpressError(
+            404,
+            "Session not found"
+        );
+
+    }
+
+    const settings =
+    await CompanionSettings.findOne({
+
+        userId:
+        session.user
+
+    });
+
+    session.snoozeCount += 1;
+
+    if(
+
+        session.snoozeCount >=
+
+        settings.maxSnoozes
+
+    ){
+
+        session.status = "failed";
+
+        session.endedAt = new Date();
+
+        await session.save();
+
+        clearSessionTimer(
+
+            session._id.toString()
+
+        );
+
+        await SessionEvent.create({
+
+            session:
+            session._id,
+
+            user:
+            session.user,
+
+            type:
+            "SESSION_FAIL",
+
+            metadata:{
+
+                reason:
+                "MAX_SNOOZE_REACHED"
+
+            }
+
+        });
+
+        return res.json({
+
+            action:"RECOVERY",
+
+            session
+
+        });
+
+    }
+
+    session.status="snoozed";
+
+    await session.save();
+
+    clearSessionTimer(
+
+        session._id.toString()
+
+    );
+
+    await SessionEvent.create({
+
+        session:
+        session._id,
+
+        user:
+        session.user,
+
+        type:
+        "SNOOZE",
+
+        metadata:{
+
+            snoozeCount:
+            session.snoozeCount
+
+        }
+
+    });
+
+    res.json({
+
+        action:"SNOOZE",
+
+        session
+
+    });
+
 };
 
 module.exports.resumeActiveSession =
@@ -199,6 +324,154 @@ async (req,res)=>{
     res.json({
         session
     });
+};
+
+module.exports.pauseSession =
+
+async (req,res)=>{
+
+const session=
+
+await FocusSession.findById(
+
+req.params.id
+
+);
+
+if(!session){
+
+throw new ExpressError(
+
+404,
+
+"Session not found"
+
+);
+
+}
+
+session.status="paused";
+
+await session.save();
+
+clearSessionTimer(
+
+session._id.toString()
+
+);
+
+await SessionEvent.create({
+
+session:session._id,
+
+user:session.user,
+
+type:"SESSION_PAUSED"
+
+});
+
+res.json({
+
+message:"Paused",
+
+session
+
+});
+
+};
+
+module.exports.resumePausedSession=
+
+async(req,res)=>{
+
+const session=
+
+await FocusSession.findById(
+
+req.params.id
+
+);
+
+session.status="active";
+
+await session.save();
+
+const io=
+
+req.app.get("io");
+
+startSessionTimer(
+
+io,
+
+session._id.toString(),
+
+session.plannedDuration
+
+);
+
+await SessionEvent.create({
+
+session:session._id,
+
+user:session.user,
+
+type:"SESSION_RESUMED"
+
+});
+
+res.json({
+
+message:"Resumed",
+
+session
+
+});
+
+};
+
+module.exports.skipSession=
+
+async(req,res)=>{
+
+const session=
+
+await FocusSession.findById(
+
+req.params.id
+
+);
+
+session.status="completed";
+
+session.completedBy="SYSTEM";
+
+session.endedAt=new Date();
+
+await session.save();
+
+clearSessionTimer(
+
+session._id.toString()
+
+);
+
+await SessionEvent.create({
+
+session:session._id,
+
+user:session.user,
+
+type:"SESSION_SKIPPED"
+
+});
+
+res.json({
+
+message:"Skipped"
+
+});
+
 };
 
 /*WHAT IS HAPPENING?
