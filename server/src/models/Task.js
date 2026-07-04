@@ -56,7 +56,8 @@ const taskSchema =new mongoose.Schema({
     enum: [
       "pending",
       "in_progress",
-      "completed"
+      "completed",
+      "skipped"
     ],
 
     default: "pending"
