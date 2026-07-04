@@ -3,13 +3,18 @@ import { motion, AnimatePresence } from "motion/react";
 import { Play, Pause, Square, Mic, Shield, ShieldAlert, Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button.jsx";
+import {
+    getSchedule
+} from "../services/scheduleService";
 
 import {
     startSession,
     completeSession,
     snoozeSession,
     failSession,
-    resumeSession
+    resumeSession,
+    pauseSession,
+    resumePausedSession
 } from "../services/sessionService";
 
 import socket, {
@@ -21,10 +26,13 @@ export function FocusMode() {
   const navigate = useNavigate();
   const [mode, setMode] = useState("gentle");
   const [isPaused, setIsPaused] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(45 * 60); // 45 minutes
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [plannedDuration, setPlannedDuration] = useState(0);
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [sessionId, setSessionId] = useState(null);
-  const [checkInStatus, setCheckInStatus] = useState(null);
+  const [checkInStatus, setCheckInStatus] = useState("listening");
+  const [voiceTimeout, setVoiceTimeout] = useState(60);
+  const [personality, setPersonality] = useState("GENTLE");
 
   // Formatting time
   const formatTime = (seconds) => {
@@ -33,8 +41,48 @@ export function FocusMode() {
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
-  const handlePause = () => {
-    setIsPaused(prev => !prev);
+  const handlePause = async () => {
+
+    if(!sessionId){
+
+        return;
+
+    }
+
+    try{
+
+        if(isPaused){
+
+            await resumePausedSession(
+
+                sessionId
+
+            );
+
+        }else{
+
+            await pauseSession(
+
+                sessionId
+
+            );
+
+        }
+
+        setIsPaused(
+
+            prev=>!prev
+
+        );
+
+    }
+
+    catch(error){
+
+        console.error(error);
+
+    }
+
   };
 
   const handleComplete = async () => {
@@ -56,55 +104,98 @@ export function FocusMode() {
 
   useEffect(() => {
     async function beginSession() {
-    try {
-        const response =
-            await startSession({
-                taskId:
-                    "YOUR_TASK_ID",
-                duration: 45,
-                mode
-            });
-        setSessionId(
-            response.session._id
-        );
-        connectSocket();
 
-        socket.emit(
-            "join_focus_session",
-            response.session._id
-        );
-    }
-    catch (error) {
-        console.error(error);
-    }
-  }
-    beginSession();
-  }, []);
-
-  useEffect(() => {
-    async function restoreSession() {
         try {
+
             const response =
                 await resumeSession();
-            if (!response.session) {
+
+            if (response.session) {
+
+                setSessionId(
+                    response.session._id
+                );
+
+                setTimeLeft(
+                    response.session.plannedDuration * 60
+                );
+
+                setPlannedDuration(
+                    response.session.plannedDuration * 60
+                );
+
+                connectSocket();
+
+                socket.emit(
+                    "join_focus_session",
+                    response.session._id
+                );
+
                 return;
             }
+
+            const schedule =
+                await getSchedule();
+
+            const firstTask =
+                schedule.schedule.find(
+                    task =>
+                        task.status === "pending"
+                );
+
+            if (!firstTask) {
+
+                navigate("/dashboard");
+
+                return;
+            }
+
+            const session =
+                await startSession({
+
+                    taskId:
+                        firstTask._id,
+
+                    duration:
+                        firstTask.estimatedDuration,
+
+                    mode
+
+                });
+
             setSessionId(
-                response.session._id
+                session.session._id
+            );
+
+            setTimeLeft(
+                firstTask.estimatedDuration * 60
+            );
+
+            setPlannedDuration(
+                firstTask.estimatedDuration * 60
             );
 
             connectSocket();
 
             socket.emit(
+
                 "join_focus_session",
-                response.session._id
+
+                session.session._id
+
             );
+
         }
+
         catch (error) {
+
             console.error(error);
+
         }
+
     }
-    restoreSession();
+
+    beginSession();
   }, []);
 
   useEffect(() => {
@@ -133,20 +224,109 @@ export function FocusMode() {
     };
   },[sessionId]);
 
-  useEffect(() => {
+  useEffect(()=>{
+
     socket.on(
+
         "show-check-in",
-        () => {
+
+        data=>{
+
             setShowCheckIn(true);
+
             setCheckInStatus("listening");
+
+            setVoiceTimeout(
+
+                data.timeout
+
+            );
+
+            setPersonality(
+
+                data.personality
+
+            );
+
         }
+
     );
-    return () => {
+
+    socket.on(
+
+        "session-completed",
+
+        ()=>{
+
+            setShowCheckIn(false);
+
+            navigate("/dashboard");
+
+        }
+
+    );
+
+    socket.on(
+
+        "session-snoozed",
+
+        ()=>{
+
+            setShowCheckIn(false);
+
+        }
+
+    );
+
+    socket.on(
+
+        "go-recovery",
+
+        ()=>{
+
+            setShowCheckIn(false);
+
+            navigate("/recovery");
+
+        }
+
+    );
+
+    socket.on(
+
+        "listen-again",
+
+        ()=>{
+
+            setCheckInStatus(
+
+                "listening"
+
+            );
+
+        }
+
+    );
+
+    return()=>{
+
         socket.off("show-check-in");
+
+        socket.off("session-completed");
+
+        socket.off("session-snoozed");
+
+        socket.off("go-recovery");
+
+        socket.off("listen-again");
+
     };
+
   },[]);
 
-  const progress = ((45 * 60 - timeLeft) / (45 * 60)) * 100;
+  const progress = plannedDuration > 0
+    ? ((plannedDuration - timeLeft) / plannedDuration) * 100
+    : 0;
   const strokeDashoffset = 283 - (283 * progress) / 100;
 
   return (
@@ -309,7 +489,15 @@ export function FocusMode() {
               </div>
 
               <h2 className="text-2xl font-medium mb-2">Voice Check-In</h2>
-              <p className="text-neutral-500 mb-8">Did you complete your session?</p>
+              <p className="text-neutral-500 mb-2">
+                {personality === "STRICT"
+                  ? "Focus check. Respond now."
+                  : "Hey! Are you still studying?"}
+              </p>
+
+              <p className="text-xs text-neutral-400">
+                Listening for {voiceTimeout} seconds...
+              </p>
 
               {checkInStatus === "listening" && (
                 <div className="mb-8 flex justify-center gap-1 h-8 items-center">
@@ -332,20 +520,22 @@ export function FocusMode() {
                 <Button 
                   className="flex-1" 
                   variant="primary"
-                  onClick={async () => {
-                      if(sessionId){
-                          await completeSession(sessionId);
-                          socket.emit(
-                              "voice-response",
-                              {
-                                  sessionId,
-                                  transcript:"completed",
-                                  currentState:"CHECK_IN_PENDING"
-                              }
-                          );
+                  onClick={async()=>{
+
+                    socket.emit(
+
+                      "voice-response",
+
+                      {
+
+                        sessionId,
+
+                        transcript:"yes"
+
                       }
-                      setShowCheckIn(false);
-                      navigate("/dashboard");
+
+                    );
+
                   }}
 
                 >
@@ -354,22 +544,22 @@ export function FocusMode() {
                 <Button 
                   className="flex-1" 
                   variant="outline"
-                  onClick={async () => {
-                      if (sessionId) {
-                          await snoozeSession(sessionId);
-                          socket.emit(
-                              "voice-response",
-                              {
-                                  sessionId,
-                                  transcript:"snooze",
-                                  currentState:"CHECK_IN_PENDING"
-                              }
-                          );
+                  onClick={async()=>{
+
+                    socket.emit(
+
+                      "voice-response",
+
+                      {
+
+                        sessionId,
+
+                        transcript:"snooze"
+
                       }
-                      setCheckInStatus("snoozed");
-                      setTimeout(() => {
-                          setShowCheckIn(false);
-                      },1000);
+
+                    );
+
                   }}
                 >
                   Snooze
@@ -377,15 +567,23 @@ export function FocusMode() {
               </div>
 
               <button 
-                onClick={async () => {
-                    if (sessionId) {
-                        await failSession(sessionId);
-                    }
-                    navigate(
-                    "/recovery"
+                onClick={()=>{
+
+                    socket.emit(
+
+                      "voice-response",
+
+                      {
+
+                        sessionId,
+
+                        transcript:"help"
+
+                      }
+
                     );
-                  }
-                }
+
+                  }}
                 className="mt-6 text-sm text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 transition-colors"
               >
                 No, I missed it...

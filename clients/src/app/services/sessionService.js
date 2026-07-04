@@ -55,3 +55,51 @@ export async function resumeSession() {
     return data;
 
 }
+
+export async function pauseSession(sessionId){
+
+    const{
+
+        data
+
+    }=await api.post(
+
+        `/sessions/pause/${sessionId}`
+
+    );
+
+    return data;
+
+}
+
+export async function resumePausedSession(sessionId){
+
+    const{
+
+        data
+
+    }=await api.post(
+
+        `/sessions/resume/${sessionId}`
+
+    );
+
+    return data;
+
+}
+
+export async function skipSession(sessionId){
+
+    const{
+
+        data
+
+    }=await api.post(
+
+        `/sessions/skip/${sessionId}`
+
+    );
+
+    return data;
+
+}
