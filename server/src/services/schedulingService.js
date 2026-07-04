@@ -45,6 +45,9 @@ function generateSchedule(tasks, startTime = new Date()) {
 
         schedule.push({
 
+            taskId:
+                task._id,
+
             title:
                 task.title,
 
@@ -53,6 +56,12 @@ function generateSchedule(tasks, startTime = new Date()) {
 
             priority:
                 task.priority,
+
+            estimatedDuration:
+                task.estimatedDuration,
+
+            status:
+                task.status,
 
             startTime:
                 taskStart,
@@ -98,6 +107,9 @@ function generateSchedule(tasks, startTime = new Date()) {
 
         schedule.push({
 
+            taskId:
+                task._id,
+
             title:
                 task.title,
 
@@ -106,6 +118,12 @@ function generateSchedule(tasks, startTime = new Date()) {
 
             priority:
                 task.priority,
+
+            estimatedDuration:
+                task.estimatedDuration,
+
+            status:
+                task.status,
 
             startTime:
                 task.fixedStartTime,
