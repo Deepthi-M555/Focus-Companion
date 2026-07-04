@@ -1,89 +1,143 @@
 const {
+
     detectIntent,
+
     executeIntent
-} = require(
+
+}=require(
+
     "../../services/intentService"
+
 );
 
-const {
-    STATES
-} = require(
-    "../../services/focusStateMachine"
+const FocusSession=
+
+require(
+
+    "../../models/FocusSession"
+
 );
 
-exports.voiceCheckIn =
-    async (
-        req,
-        res
-    ) => {
+const CompanionSettings=
 
-        try {
+require(
 
-            const {
-                transcript
-            } = req.body;
+    "../../models/CompanionSettings"
 
-            if (
-                !transcript
-            ) {
+);
 
-                return res
-                    .status(400)
-                    .json({
+exports.voiceCheckIn=
 
-                        success: false,
+async(req,res)=>{
 
-                        error: {
-                            message:
-                                "Transcript is required."
-                        }
+try{
 
-                    });
+const{
 
-            }
+transcript,
 
-            const intent =
-                detectIntent(
-                    transcript
-                );
+sessionId
 
-            const result =
-                executeIntent({
+}=req.body;
 
-                    intent,
+if(
 
-                    currentState:
-                        STATES.CHECK_IN_PENDING
+!transcript||
 
-                });
+!sessionId
 
-            return res.json({
+){
 
-                success: true,
+return res.status(400).json({
 
-                transcript,
+success:false,
 
-                intent,
+message:"Transcript and sessionId required."
 
-                ...result
+});
 
-            });
+}
 
-        } catch (error) {
+const session=
 
-            return res
-                .status(500)
-                .json({
+await FocusSession.findById(
 
-                    success: false,
+sessionId
 
-                    error: {
-                        message:
-                            error.message
-                    }
+);
 
-                });
+if(!session){
 
-        }
+return res.status(404).json({
 
-    };
+success:false,
+
+message:"Session not found."
+
+});
+
+}
+
+const settings=
+
+await CompanionSettings.findOne({
+
+userId:session.user
+
+});
+
+const intent=
+
+detectIntent(
+
+transcript
+
+);
+
+const result=
+
+executeIntent({
+
+intent,
+
+currentState:
+
+session.status
+
+});
+
+return res.json({
+
+success:true,
+
+personality:
+
+settings.personality,
+
+intent,
+
+nextState:
+
+result.nextState,
+
+action:
+
+result.action
+
+});
+
+}
+
+catch(error){
+
+return res.status(500).json({
+
+success:false,
+
+message:error.message
+
+});
+
+}
+
+};
