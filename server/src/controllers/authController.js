@@ -2,6 +2,7 @@ const User = require("../models/User");
 const bcrypt = require("bcrypt");
 const ExpressError = require("../utils/ExpressError");
 const jwt = require("jsonwebtoken");
+const Setup = require("../models/Setup");
 
 module.exports.signup = async (req, res, next) => {
   const { email, password } = req.body;
@@ -12,7 +13,7 @@ module.exports.signup = async (req, res, next) => {
 
   const existingUser = await User.findOne({ email });
   if (existingUser) {
-    throw new ExpressError(400, "User already exists");
+    throw new ExpressError(409, "Email already exists");
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
@@ -48,8 +49,8 @@ module.exports.login = async (req, res, next) => {
     );
 
     throw new ExpressError(
-      401,
-      "Invalid credentials"
+      404,
+      "Account not found"
     );
 
   }
@@ -57,7 +58,7 @@ module.exports.login = async (req, res, next) => {
 
   const isMatch = await bcrypt.compare(password, user.passwordHash);
   if (!isMatch) {
-    throw new ExpressError(400, "Invalid credentials");
+    throw new ExpressError(401, "Invalid credentials");
   }
 
   const sessionId = Date.now().toString();
@@ -69,9 +70,14 @@ module.exports.login = async (req, res, next) => {
     { expiresIn: "7d" }
   );
 
+  const setupCompleted = Boolean(
+    await Setup.exists({ user: user._id })
+  );
+
   res.status(200).json({
     message: "Login successful",
     token,
+    setupCompleted,
 
     user: {
     id: user._id,
