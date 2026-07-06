@@ -2,7 +2,9 @@ const requiredEnvVars = [
 
   "MONGO_URI",
 
-  "JWT_SECRET"
+  "JWT_SECRET",
+
+  "GEMINI_API_KEY"
 
 ];
 
