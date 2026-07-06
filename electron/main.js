@@ -1,6 +1,7 @@
 const {
     app,
-    ipcMain
+    ipcMain,
+    BrowserWindow
 } = require("electron");
 
 const createMainWindow =
@@ -32,7 +33,8 @@ app.whenReady().then(() => {
     });
 
     registerFocusIPC({
-        ipcMain
+        ipcMain,
+        BrowserWindow
     });
 
 });

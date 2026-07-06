@@ -47,7 +47,7 @@ function createOverlay() {
         });
 
     overlay.loadURL(
-        "http://localhost:5173/overlay"
+        "http://localhost:5174/overlay"
     );
 
     return overlay;
