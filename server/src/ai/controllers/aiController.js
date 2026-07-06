@@ -39,6 +39,8 @@ const {
     "../services/geminiService"
 );
 
+const ExpressError = require("../../utils/ExpressError");
+
 exports.chat = async (
     req,
     res
@@ -56,12 +58,16 @@ exports.chat = async (
 
         } = req.body;
 
+        if (!message || !message.trim()) {
+            throw new ExpressError(400, "Message is required.");
+        }
+
         const settings =
             await CompanionSettings
                 .findOne({
 
                     userId:
-                        req.user._id
+                        req.identity.userId
 
                 });
 
@@ -99,7 +105,7 @@ exports.chat = async (
                 req.app.get("io"),
 
             userId:
-                req.user._id
+                req.identity.userId
 
         });
                 
@@ -188,11 +194,11 @@ exports.chat = async (
             error
         );
 
-        return res.status(500)
+        return res.status(error.statusCode || 500)
             .json({
 
                 message:
-                    "AI request failed."
+                    error.statusCode ? error.message : "AI request failed. Please try again."
 
             });
 
@@ -216,11 +222,15 @@ exports.addStudyGoal = async (
 
     } = req.body;
 
+    if (!message || !message.trim()) {
+        throw new ExpressError(400, "Message is required.");
+    }
+
     const settings =
         await CompanionSettings.findOne({
 
             userId:
-                req.user._id
+                req.identity.userId
 
         });
 

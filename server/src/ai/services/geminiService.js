@@ -4,6 +4,8 @@ const {
     "@google/generative-ai"
 );
 
+const ExpressError = require("../../utils/ExpressError");
+
 const genAI =
     new GoogleGenerativeAI(
         process.env.GEMINI_API_KEY
@@ -13,13 +15,17 @@ const model =
     genAI.getGenerativeModel({
 
         model:
-            "gemini-1.5-flash"
+            process.env.GEMINI_MODEL
 
     });
 
 async function generateResponse(
     prompt
 ) {
+
+    if (!process.env.GEMINI_API_KEY) {
+        throw new ExpressError(503, "AI service is not configured.");
+    }
 
     try {
 
@@ -31,28 +37,24 @@ async function generateResponse(
         const text =
             result.response.text();
 
+        if (!text || !text.trim()) {
+            throw new ExpressError(502, "AI service returned an empty response.");
+        }
+
         let parsed;
 
         try {
 
-            parsed =
-                JSON.parse(text);
+            const normalizedText = text
+                .trim()
+                .replace(/^```(?:json)?\s*/i, "")
+                .replace(/\s*```$/, "");
+
+            parsed = JSON.parse(normalizedText);
 
         } catch {
 
-            parsed = {
-
-                message:
-                    "I couldn't understand the response.",
-
-                action:
-                    "NONE",
-
-                suggestions: [],
-
-                data: {}
-
-            };
+            throw new ExpressError(502, "AI service returned an invalid response.");
 
         }
 
@@ -62,7 +64,7 @@ async function generateResponse(
                 parsed.message || "",
 
             action:
-                parsed.action || "NONE",
+                parsed.action ?? null,
 
             suggestions:
                 parsed.suggestions || [],
@@ -79,19 +81,38 @@ async function generateResponse(
             error
         );
 
-        return {
+        if (error instanceof ExpressError) {
+            throw error;
+        }
 
-            message:
-                "AI service unavailable.",
+        const errorMessage = error.message || "";
+        const errorStatus = error.status || error.statusCode;
 
-            action:
-                "NONE",
+        if (
+            errorStatus === 404 ||
+            /model.*(?:not found|does not exist|not supported)/i.test(errorMessage)
+        ) {
+            throw new ExpressError(
+                503,
+                "AI model configuration is invalid. Please contact support."
+            );
+        }
 
-            suggestions: [],
+        if (
+            errorStatus === 401 ||
+            errorStatus === 403 ||
+            /api key|API_KEY_INVALID|permission denied|unauthenticated/i.test(errorMessage)
+        ) {
+            throw new ExpressError(
+                503,
+                "AI service authentication failed."
+            );
+        }
 
-            data: {}
-
-        };
+        throw new ExpressError(
+            503,
+            "AI service is temporarily unavailable. Please try again in a few minutes."
+        );
 
     }
 

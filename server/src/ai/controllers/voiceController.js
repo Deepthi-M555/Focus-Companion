@@ -82,7 +82,7 @@ exports.transcribe = async (
             await CompanionSettings.findOne({
 
                 userId:
-                    req.user._id
+                    req.identity.userId
 
             });
 
@@ -123,10 +123,7 @@ exports.transcribe = async (
                 prompt
             );
 
-        const aiResponse =
-            parseResponse(
-                rawResponse
-            );
+        const aiResponse = rawResponse;
 
         /*
         ============================
@@ -143,7 +140,7 @@ exports.transcribe = async (
                 req.app.get("io"),
 
             userId:
-                req.user._id
+                req.identity.userId
 
         });
 

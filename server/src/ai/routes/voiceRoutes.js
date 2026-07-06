@@ -12,9 +12,13 @@ const {
     "../controllers/voiceController"
 );
 
+const { isLoggedIn } = require("../../middleware/authMiddleware");
+
 router.post(
 
     "/transcribe",
+
+    isLoggedIn,
 
     transcribe
 
