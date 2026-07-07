@@ -9,6 +9,7 @@ const scheduleRoutes = require("./routes/scheduleRoutes");
 const recoveryRoutes = require("./routes/recoveryRoutes");
 const setupRoutes = require("./routes/setupRoutes");
 const settingsRoutes = require("./routes/settingsRoutes");
+const userRoutes = require("./routes/userRoutes");
 
 const aiRoutes = require("./ai/routes/aiRoutes");
 const aiVoiceRoutes = require("./ai/routes/voiceRoutes");
@@ -35,6 +36,7 @@ app.use("/api/schedule", scheduleRoutes);
 app.use("/api/recovery", recoveryRoutes);
 app.use("/api/setup", setupRoutes);
 app.use("/api/settings", settingsRoutes);
+app.use("/api/users", userRoutes);
 
 app.use("/api/ai",aiRoutes);
 app.use("/api/ai/voice", aiVoiceRoutes);
