@@ -5,9 +5,9 @@ const jwt = require("jsonwebtoken");
 const Setup = require("../models/Setup");
 
 module.exports.signup = async (req, res, next) => {
-  const { email, password } = req.body;
+  const { name, email, password } = req.body;
 
-  if (!email || !password) {
+  if (!name || !email || !password) {
     throw new ExpressError(400, "All fields are required");
   }
 
@@ -19,6 +19,7 @@ module.exports.signup = async (req, res, next) => {
   const passwordHash = await bcrypt.hash(password, 10);
 
   const newUser = new User({
+    name,
     email,
     passwordHash
   });
