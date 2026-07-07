@@ -1,18 +1,20 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { Mic, Send, Sparkles, StopCircle, Play, Target } from "lucide-react";
+import { Mic, Send, Sparkles, StopCircle, Target } from "lucide-react";
 import { Button } from "../components/ui/Button.jsx";
 import { toast } from "sonner";
 
 import { chat } from "../services/dashboardService";
+import { loadTodaySchedule, saveSchedule } from "../services/taskService";
+import { ProfileAvatar } from "../components/ProfileAvatar.jsx";
 
 const getGreeting = () => {
   const hour = new Date().getHours();
 
   if (hour < 12) return {
     heading: "Good morning.",
-    body: "Ready to plan today's deep work?"
+    body: "Ready to shape today's deep work?"
   };
   if (hour < 17) return {
     heading: "Good afternoon.",
@@ -37,11 +39,28 @@ const createInitialGreeting = () => {
   };
 };
 
+const formatTaskMinutes = (tasks = []) => {
+  const minutes = tasks.reduce(
+    (sum, task) => sum + Number(task.estimatedDuration || 0),
+    0
+  );
+
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+
+  const hours = Number((minutes / 60).toFixed(1));
+  return `${hours}h`;
+};
+
 export function Dashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { profile = { name: "", email: "", avatar: "" } } = useOutletContext() || {};
   const [inputValue, setInputValue] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [todayTasks, setTodayTasks] = useState([]);
   const [messages, setMessages] = useState(() => {
     const storedMessages = sessionStorage.getItem("dashboardMessages");
 
@@ -58,6 +77,15 @@ export function Dashboard() {
 
   const bottomRef = useRef(null);
 
+  const fetchSchedule = async () => {
+    try {
+      const response = await loadTodaySchedule();
+      setTodayTasks(response?.schedule || []);
+    } catch {
+      setTodayTasks([]);
+    }
+  };
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -65,6 +93,16 @@ export function Dashboard() {
   useEffect(() => {
     sessionStorage.setItem("dashboardMessages", JSON.stringify(messages));
   }, [messages]);
+
+  useEffect(() => {
+    void fetchSchedule();
+  }, []);
+
+  useEffect(() => {
+    if (location.state?.refreshSchedule) {
+      void fetchSchedule();
+    }
+  }, [location]);
 
   const handleSend = async () => {
     if (!inputValue.trim() || isSending) return;
@@ -83,7 +121,7 @@ export function Dashboard() {
         const generatedTasks = response.data?.tasks || [];
 
         if (generatedTasks.length) {
-          sessionStorage.setItem("pendingSchedule", JSON.stringify(generatedTasks));
+          await saveSchedule({ tasks: generatedTasks });
         }
 
         setMessages(prev => [
@@ -92,8 +130,9 @@ export function Dashboard() {
                 role: "ai",
                 text: generatedTasks.length
                   ? "I've created an optimized focus schedule based on your available time and priorities. Review it before beginning your focus session."
-                  : response.message || "Your plan is ready.",
-                hasSchedule: generatedTasks.length > 0
+                  : response.message || "Your schedule is ready.",
+                hasSchedule: generatedTasks.length > 0,
+                scheduleTasks: generatedTasks
             }
         ]);
     }
@@ -130,8 +169,15 @@ export function Dashboard() {
       {/* Header */}
       <header className="p-6 relative z-10 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-light tracking-tight">Focus Planning</h2>
+          <h2 className="text-2xl font-light tracking-tight">Focus Dashboard</h2>
           <p className="text-neutral-500 text-sm">Tell FYNIX what you need to accomplish</p>
+        </div>
+        <div className="flex min-w-0 items-center gap-3">
+          <ProfileAvatar profile={profile} />
+          <div className="min-w-0 text-right">
+            <p className="truncate text-sm font-medium">{profile.name || "User"}</p>
+            <p className="truncate text-xs text-neutral-500">{profile.email || "Active user"}</p>
+          </div>
         </div>
       </header>
 
@@ -170,22 +216,20 @@ export function Dashboard() {
                   <div className="flex justify-between items-center">
                     <h4 className="font-medium text-sm flex items-center gap-2">
                       <Target className="w-4 h-4 text-blue-500" />
-                      Generated Plan Available
+                      Generated Schedule Available
                     </h4>
-                    <span className="text-xs text-neutral-500">3 hrs total</span>
+                    <span className="text-xs text-neutral-500">
+                      {formatTaskMinutes(msg.scheduleTasks)} total
+                    </span>
                   </div>
                   
                   <div className="space-y-2">
-                    <div className="h-2 w-full bg-neutral-200 dark:bg-neutral-800 rounded-full overflow-hidden flex">
-                      <div className="h-full bg-blue-500 w-[45%]" title="DSA"></div>
-                      <div className="h-full bg-purple-500 w-[15%]" title="Break"></div>
-                      <div className="h-full bg-emerald-500 w-[40%]" title="OS"></div>
-                    </div>
-                    <div className="flex justify-between text-xs text-neutral-500 px-1">
-                      <span>DSA (90m)</span>
-                      <span>Break (15m)</span>
-                      <span>OS (75m)</span>
-                    </div>
+                    {(msg.scheduleTasks || []).map(task => (
+                      <div key={task._id || task.title} className="flex justify-between gap-3 text-xs text-neutral-500 px-1">
+                        <span className="truncate">{task.title}</span>
+                        <span className="flex-shrink-0">{task.estimatedDuration}m</span>
+                      </div>
+                    ))}
                   </div>
 
                   <div className="flex gap-3 pt-2">
