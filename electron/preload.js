@@ -8,28 +8,55 @@ contextBridge.exposeInMainWorld(
     {
 
         startFocusSession: () =>
-            ipcRenderer.send(
+            ipcRenderer.invoke(
                 "start-focus-session"
             ),
 
         pauseFocusSession: () =>
-            ipcRenderer.send(
+            ipcRenderer.invoke(
                 "pause-focus-session"
             ),
 
         completeFocusSession: () =>
-            ipcRenderer.send(
+            ipcRenderer.invoke(
                 "complete-focus-session"
             ),
 
+        getPermissionStatus: () =>
+            ipcRenderer.invoke(
+                "permissions:get-status"
+            ),
+
+        requestMicrophonePermission: () =>
+            ipcRenderer.invoke(
+                "permissions:request-microphone"
+            ),
+
+        setAlwaysOnTop: (enabled) =>
+            ipcRenderer.invoke(
+                "permissions:set-always-on-top",
+                Boolean(enabled)
+            ),
+
         showOverlay: () =>
-            ipcRenderer.send(
+            ipcRenderer.invoke(
                 "show-overlay"
             ),
 
         hideOverlay: () =>
-            ipcRenderer.send(
+            ipcRenderer.invoke(
                 "hide-overlay"
+            ),
+
+        getOverlayStatus: () =>
+            ipcRenderer.invoke(
+                "overlay:get-status"
+            ),
+
+        notify: (options) =>
+            ipcRenderer.invoke(
+                "notify",
+                options
             ),
 
         onCheckInRequired:

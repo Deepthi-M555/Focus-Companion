@@ -1,7 +1,8 @@
 const {
     app,
     ipcMain,
-    BrowserWindow
+    BrowserWindow,
+    systemPreferences
 } = require("electron");
 
 const createMainWindow =
@@ -16,16 +17,71 @@ const registerOverlayIPC =
 const registerFocusIPC =
     require("./ipc/focusIPC");
 
+const registerPermissionsIPC =
+    require("./ipc/permissionsIPC");
+
+const registerNotificationIPC =
+    require("./ipc/notificationIPC");
+
 let mainWindow;
 let overlayWindow;
+
+function ensureOverlayWindow() {
+    if (
+        overlayWindow &&
+        !overlayWindow.isDestroyed()
+    ) {
+        return overlayWindow;
+    }
+
+    overlayWindow = createOverlay({
+        app
+    });
+
+    return overlayWindow;
+}
+
+function createTrackedMainWindow() {
+
+    const window =
+        createMainWindow();
+
+    window.on(
+        "closed",
+        () => {
+
+            mainWindow = null;
+
+            if (
+                process.platform !== "darwin"
+            ) {
+
+                app.quit();
+
+            }
+
+        }
+    );
+
+    return window;
+}
+
+app.on(
+    "before-quit",
+    () => {
+
+        app.isQuitting = true;
+
+    }
+);
 
 app.whenReady().then(() => {
 
     mainWindow =
-        createMainWindow();
+        createTrackedMainWindow();
 
     overlayWindow =
-        createOverlay();
+        ensureOverlayWindow();
 
     registerOverlayIPC({
         ipcMain,
@@ -35,6 +91,16 @@ app.whenReady().then(() => {
     registerFocusIPC({
         ipcMain,
         BrowserWindow
+    });
+
+    registerPermissionsIPC({
+        ipcMain,
+        systemPreferences,
+        overlayWindow
+    });
+
+    registerNotificationIPC({
+        ipcMain
     });
 
 });
@@ -47,6 +113,7 @@ app.on(
             process.platform !== "darwin"
         ) {
 
+            app.isQuitting = true;
             app.quit();
 
         }
@@ -59,12 +126,12 @@ app.on(
     () => {
 
         if (
-            BrowserWindow.getAllWindows()
-                .length === 0
+            !mainWindow ||
+            mainWindow.isDestroyed()
         ) {
 
             mainWindow =
-                createMainWindow();
+                createTrackedMainWindow();
 
         }
 

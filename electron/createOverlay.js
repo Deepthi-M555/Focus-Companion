@@ -4,7 +4,9 @@ const {
 
 const path = require("path");
 
-function createOverlay() {
+function createOverlay({
+    app
+} = {}) {
 
     const overlay =
         new BrowserWindow({
@@ -17,7 +19,7 @@ function createOverlay() {
 
             transparent: true,
 
-            alwaysOnTop: true,
+            alwaysOnTop: false,
 
             skipTaskbar: true,
 
@@ -48,6 +50,40 @@ function createOverlay() {
 
     overlay.loadURL(
         "http://localhost:5174/overlay"
+    );
+    overlay.setVisibleOnAllWorkspaces(
+        true
+    );
+
+    overlay.setFullScreenable(
+        false
+    );
+
+    overlay.on(
+        "close",
+        (event) => {
+
+            if (
+                app?.isQuitting
+            ) {
+
+                return;
+
+            }
+
+            event.preventDefault();
+            overlay.hide();
+
+        }
+    );
+
+    overlay.once(
+        "ready-to-show",
+        () => {
+
+            overlay.hide();
+
+        }
     );
 
     return overlay;

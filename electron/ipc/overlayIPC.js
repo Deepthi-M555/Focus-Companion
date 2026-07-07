@@ -12,6 +12,8 @@ function registerOverlayIPC({
         "show-overlay",
         async () => {
 
+            try {
+
             if (
                 !isOverlayAvailable()
             ) {
@@ -27,8 +29,18 @@ function registerOverlayIPC({
             overlayWindow.show();
 
             return {
-                success: true
+                success: true,
+                visible: overlayWindow.isVisible()
             };
+
+            } catch (error) {
+
+                return {
+                    success: false,
+                    error: error.message || "Unable to show overlay"
+                };
+
+            }
 
         }
     );
@@ -36,6 +48,8 @@ function registerOverlayIPC({
     ipcMain.handle(
         "hide-overlay",
         async () => {
+
+            try {
 
             if (
                 !isOverlayAvailable()
@@ -52,8 +66,53 @@ function registerOverlayIPC({
             overlayWindow.hide();
 
             return {
-                success: true
+                success: true,
+                visible: overlayWindow.isVisible()
             };
+
+            } catch (error) {
+
+                return {
+                    success: false,
+                    error: error.message || "Unable to hide overlay"
+                };
+
+            }
+
+        }
+    );
+
+    ipcMain.handle(
+        "overlay:get-status",
+        async () => {
+
+            try {
+
+                if (
+                    !isOverlayAvailable()
+                ) {
+
+                    return {
+                        success: false,
+                        error: "Overlay window unavailable"
+                    };
+
+                }
+
+                return {
+                    success: true,
+                    visible: overlayWindow.isVisible(),
+                    alwaysOnTop: overlayWindow.isAlwaysOnTop()
+                };
+
+            } catch (error) {
+
+                return {
+                    success: false,
+                    error: error.message || "Unable to read overlay status"
+                };
+
+            }
 
         }
     );
