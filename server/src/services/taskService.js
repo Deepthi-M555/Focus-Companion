@@ -1,4 +1,5 @@
 const Task = require("../models/Task");
+const ScheduleMetadata = require("../models/ScheduleMetadata");
 
 async function saveSchedule({
 
@@ -12,11 +13,17 @@ async function saveSchedule({
 
         userId,
 
-        completed: false
+        completed: false,
+
+        status: {
+            $ne: "in_progress"
+        }
 
     });
 
-    const documents = tasks.map(
+    const documents = tasks
+    .filter(task => task.status !== "in_progress")
+    .map(
 
         (task, index) => ({
 
@@ -46,6 +53,33 @@ async function saveSchedule({
 
         })
 
+    );
+
+    if (!documents.length) {
+        await ScheduleMetadata.findOneAndUpdate(
+            { user: userId },
+            {
+                user: userId,
+                totalPlannedMinutes: 0,
+                generatedAt: new Date()
+            },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+
+        return [];
+    }
+
+    await ScheduleMetadata.findOneAndUpdate(
+        { user: userId },
+        {
+            user: userId,
+            totalPlannedMinutes: documents.reduce(
+                (sum, task) => sum + Number(task.estimatedDuration || 0),
+                0
+            ),
+            generatedAt: new Date()
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
     return Task.insertMany(
