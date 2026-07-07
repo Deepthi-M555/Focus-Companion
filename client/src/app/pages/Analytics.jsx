@@ -4,6 +4,41 @@ import { getAnalytics } from "../services/analyticsService";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from "recharts";
 import { Clock, Target, Calendar, Zap, AlertTriangle, Brain } from "lucide-react";
 
+const EVENT_LABELS = {
+  SESSION_START: "Focus Started",
+  CHECK_IN_TRIGGERED: "Voice Check-In",
+  CHECK_IN: "Voice Response",
+  SESSION_COMPLETED: "Focus Completed",
+  SESSION_FAILED: "Focus Ended",
+  RECOVERY_STARTED: "Recovery Started"
+};
+
+function formatTimelineTime(value) {
+  const date = new Date(value);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const eventDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const time = date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit"
+  });
+
+  if (eventDay.getTime() === today.getTime()) {
+    return `Today ${time}`;
+  }
+
+  if (eventDay.getTime() === yesterday.getTime()) {
+    return `Yesterday ${time}`;
+  }
+
+  return `${date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short"
+  })} ${time}`;
+}
+
 export function Analytics() {
   const [stats, setStats] = useState({});
   const [weeklyData, setWeeklyData] = useState([]);
@@ -22,12 +57,16 @@ export function Analytics() {
         setStats(data.stats);
         setWeeklyData(data.weeklyData);
         setTrendData(data.trendData);
-        setTimeline(data.timeline || []);
+        setTimeline(
+          (data.timeline || [])
+            .slice()
+            .sort((a, b) => new Date(b.time) - new Date(a.time))
+            .slice(0, 10)
+        );
         setInsight(data.insight);
         setProductiveTime(data.productiveTime);
         setAverageSession(data.averageSession);
       } catch (error) {
-        console.error(error);
         setError("Unable to load analytics.");
       } finally {
         setLoading(false);
@@ -172,9 +211,9 @@ export function Analytics() {
                 key={event.id}
                 className="flex justify-between items-center gap-4 border-b border-neutral-200 dark:border-neutral-800 pb-2 text-sm"
               >
-                <span>{event.type}</span>
+                <span>{EVENT_LABELS[event.type] || "Focus Activity"}</span>
                 <span className="text-xs text-neutral-500 whitespace-nowrap">
-                  {new Date(event.time).toLocaleString()}
+                  {formatTimelineTime(event.time)}
                 </span>
               </div>
             ))}

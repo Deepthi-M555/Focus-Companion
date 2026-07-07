@@ -207,21 +207,67 @@ async function getAnalytics(userId) {
         Current Streak
     */
 
+    const uniqueDays = [
+
+        ...new Set(
+
+            completedSessions.map(
+
+                session =>
+
+                    new Date(session.startedAt)
+
+                        .toISOString()
+
+                        .split("T")[0]
+
+            )
+
+        )
+
+    ].sort(
+        (a, b) =>
+
+            new Date(b) - new Date(a)
+    );
+
     let streak = 0;
 
-    for (
+    let expected = new Date();
 
-        let i =
+    expected.setHours(0, 0, 0, 0);
 
-            completedSessions.length - 1;
+    for (const day of uniqueDays) {
 
-        i >= 0;
+        const current =
 
-        i--
+            new Date(day);
 
-    ) {
+        current.setHours(0, 0, 0, 0);
 
-        streak++;
+        const diff =
+
+            (expected - current)
+
+            / (1000 * 60 * 60 * 24);
+
+        if (diff === 0) {
+
+            streak++;
+
+            expected.setDate(
+
+                expected.getDate() - 1
+
+            );
+
+        }
+
+        else {
+
+            break;
+
+        }
 
     }
 
@@ -380,6 +426,19 @@ async function getAnalytics(userId) {
 
     }
 
+    const timeline = events
+        .sort(
+            (a, b) =>
+                new Date(a.createdAt) -
+                new Date(b.createdAt)
+        )
+        .map(event => ({
+            id: event._id,
+            type: event.type,
+            time: event.createdAt,
+            metadata: event.metadata
+        }));
+
     return {
 
         stats: {
@@ -402,7 +461,9 @@ async function getAnalytics(userId) {
 
         averageSession,
 
-        insight
+        insight,
+
+        timeline
 
     };
 
