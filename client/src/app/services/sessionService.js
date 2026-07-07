@@ -12,18 +12,6 @@ export async function startSession(data, owner = "WEB") {
 
 }
 
-export async function completeSession(sessionId, owner = "WEB") {
-
-    const { data } =
-        await api.post(
-            `/sessions/complete/${sessionId}`,
-            { owner }
-        );
-
-    return data;
-
-}
-
 export async function failSession(sessionId, owner = "WEB") {
 
     const { data } =

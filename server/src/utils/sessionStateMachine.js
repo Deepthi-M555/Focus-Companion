@@ -6,24 +6,31 @@ const transitions = {
 
   active: [
     "check_in_pending",
-    "failed",
+    "paused",
     "snoozed"
+  ],
+
+  paused: [
+    "active",
+    "recovery"
   ],
 
   check_in_pending: [
     "completed",
-    "failed",
-    "snoozed"
+    "snoozed",
+    "recovery"
   ],
 
   snoozed: [
     "active",
-    "failed"
+    "recovery"
   ],
 
   completed: [],
 
-  failed: []
+  recovery: [],
+
+  skipped: []
 
 };
 

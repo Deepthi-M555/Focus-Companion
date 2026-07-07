@@ -27,15 +27,15 @@ new mongoose.Schema({
 
     enum: [
       "SESSION_START",
+      "SESSION_PAUSED",
+      "SESSION_RESUMED",
       "CHECK_IN_TRIGGERED",
       "CHECK_IN",
       "DISTRACTION",
       "SNOOZE",
       "SESSION_COMPLETE",
-      "SESSION_FAIL",
       "RECOVERY_TRIGGERED",
       "SESSION_SKIPPED",
-      "SESSION_RESUMED",
       "RECOVERY_COMPLETED"
     ],
 

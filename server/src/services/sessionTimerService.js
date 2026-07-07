@@ -50,11 +50,7 @@ async (
 
         });
 
-    const interval =
-
-        settings?.checkInInterval ??
-
-        duration;
+    const interval = duration;
 
     const timer =
 
@@ -81,6 +77,7 @@ async (
                             nextState:
                                 STATES.CHECK_IN_PENDING
                         });
+                    currentSession.remainingDuration = 0;
 
                     await currentSession.save();
 
@@ -160,6 +157,12 @@ async (
                                             nextState:
                                                 STATES.RECOVERY_ENGINE
                                         });
+
+                                    if (
+                                        pendingSession.distractionCount < 1
+                                    ) {
+                                        pendingSession.distractionCount += 1;
+                                    }
 
                                     pendingSession.completedBy =
                                         "RECOVERY";

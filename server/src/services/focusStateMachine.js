@@ -4,6 +4,8 @@ const STATES = {
 
     ACTIVE: "active",
 
+    PAUSED: "paused",
+
     CHECK_IN_PENDING:
         "check_in_pending",
 
@@ -26,7 +28,17 @@ const transitions = {
 
     active: [
 
-        "check_in_pending"
+        "check_in_pending",
+
+        "paused"
+
+    ],
+
+    paused: [
+
+        "active",
+
+        "recovery"
 
     ],
 

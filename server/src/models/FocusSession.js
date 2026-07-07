@@ -26,6 +26,17 @@ new mongoose.Schema({
     required: true
   },
 
+  remainingDuration: {
+    type: Number,
+    default: null
+  },
+
+  owner: {
+    type: String,
+    enum: ["WEB", "DESKTOP"],
+    default: "WEB"
+  },
+
   actualDuration: {
     type: Number,
     default: 0
@@ -36,12 +47,12 @@ new mongoose.Schema({
     enum: [
       "scheduled",
       "active",
+      "paused",
       "check_in_pending",
+      "snoozed",
       "recovery",
       "completed",
-      "failed",
-      "snoozed",
-      "paused"
+      "skipped"
     ],
     default: "scheduled"
   },
@@ -74,7 +85,6 @@ new mongoose.Schema({
       type: String,
       enum: [
           "USER",
-          "TIMEOUT",
           "RECOVERY",
           "SYSTEM"
       ],

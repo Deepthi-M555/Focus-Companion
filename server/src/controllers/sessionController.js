@@ -25,7 +25,8 @@ async (req, res) => {
   const {
     taskId,
     duration,
-    mode
+    mode,
+    owner = "WEB"
   } = req.body;
 
   if (
@@ -38,12 +39,32 @@ async (req, res) => {
       "Task and duration required"
     );
   }
+  const existingSession = await FocusSession.findOne({
+    user: req.identity.userId,
+    status: { $in: ["active", "paused", "check_in_pending", "snoozed"] }
+  })
+    .sort({ startedAt: -1 })
+    .populate("task");
+
+  if (existingSession) {
+    return res.status(409).json({
+      success: false,
+      conflict: "ACTIVE_SESSION",
+      error: {
+        message: "Active session already exists"
+      },
+      session: existingSession
+    });
+  }
+
   const session =
     await FocusSession.create({
       user: req.identity.userId,
       task: taskId,
       plannedDuration: duration,
+      remainingDuration: duration,
       mode,
+      owner,
       status: "active",
       startedAt: new Date()
     });
@@ -78,82 +99,9 @@ startSessionTimer(
   });
 };
 
-module.exports.completeSession =
-async (req, res) => {
-  const session =
-    await FocusSession.findOne({
-        _id: req.params.id,
-        user: req.identity.userId
-    });
-
-  if (!session) {
-    throw new ExpressError(
-      404,
-      "Session not found"
-    );
-  }
-  session.status = "completed";
-  session.endedAt = new Date();
-  const actualDuration = Math.floor(
-    (Date.now() -
-    session.startedAt.getTime()) /
-    60000
-);
-session.actualDuration = actualDuration;
-  await session.save();
-
-  await Task.findByIdAndUpdate(
-
-      session.task,
-
-      {
-
-          status:
-          "completed",
-
-          completed:true
-
-      }
-
-  );
-
-  clearSessionTimer(
-      session._id.toString()
-  );
-
-  await SessionEvent.create({
-
-      session:
-      session._id,
-
-      user:
-      session.user,
-
-      type:
-      "SESSION_COMPLETE",
-
-      metadata:{
-
-          actualDuration,
-
-          completedAt:new Date()
-
-      }
-
-  });
-
-  res.json({
-
-      action:"COMPLETE",
-
-      session
-
-  });
-};
-
-
 module.exports.failSession =
 async (req, res) => {
+    const owner = req.body.owner || "WEB";
     const session =
       await FocusSession.findOne({
           _id: req.params.id,
@@ -165,10 +113,27 @@ async (req, res) => {
       "Session not found"
     );
   }
-  session.status = "failed";
+
+  if (session.owner === "DESKTOP" && owner !== "DESKTOP") {
+    throw new ExpressError(
+      409,
+      "Session is controlled by the desktop client"
+    );
+  }
+
+  session.status = "recovery";
+  session.completedBy = "SYSTEM";
   session.endedAt =
     new Date();
   await session.save();
+
+  await Task.findByIdAndUpdate(
+      session.task,
+      {
+          status: "skipped"
+      }
+  );
+
   clearSessionTimer(
       session._id.toString()
   );
@@ -176,16 +141,16 @@ async (req, res) => {
   await SessionEvent.create({
       session: session._id,
       user: session.user,
-      type: "SESSION_FAIL",
+      type: "RECOVERY_TRIGGERED",
       metadata: {
-        failedAt:
-            new Date()
+        reason: "SESSION_ENDED_BY_USER",
+        endedAt: new Date()
       }
   });
 
   res.json({
     message:
-      "Session failed",
+      "Session ended",
     session
   });
 };
@@ -226,7 +191,9 @@ async (req,res)=>{
 
     ){
 
-        session.status = "failed";
+        session.status = "recovery";
+
+        session.completedBy = "RECOVERY";
 
         session.endedAt = new Date();
 
@@ -247,7 +214,7 @@ async (req,res)=>{
             session.user,
 
             type:
-            "SESSION_FAIL",
+            "RECOVERY_TRIGGERED",
 
             metadata:{
 
@@ -308,6 +275,32 @@ async (req,res)=>{
 
 };
 
+const computeRemainingDuration = (session) => {
+  if (!session) return null;
+  const baseDuration =
+    session.remainingDuration != null
+      ? session.remainingDuration
+      : session.plannedDuration;
+
+  if (session.status === "paused") {
+    return baseDuration;
+  }
+
+  if (session.status === "check_in_pending") {
+    return 0;
+  }
+
+  if (session.startedAt && Number.isFinite(baseDuration)) {
+    const elapsedSeconds = Math.max(
+      0,
+      Math.floor((Date.now() - session.startedAt.getTime()) / 1000)
+    );
+    return Math.max(0, Math.round(baseDuration * 60 - elapsedSeconds) / 60);
+  }
+
+  return baseDuration;
+};
+
 module.exports.resumeActiveSession =
 async (req,res)=>{
     const session =
@@ -316,11 +309,19 @@ async (req,res)=>{
             status:{
                 $in:[
                     "active",
+                    "paused",
                     "check_in_pending",
                     "snoozed"
                 ]
             }
-        }).populate("task");
+        })
+        .sort({ startedAt: -1 })
+        .populate("task");
+
+    if (session) {
+      session.remainingDuration = computeRemainingDuration(session);
+    }
+
     res.json({
         session
     });
@@ -330,7 +331,9 @@ module.exports.pauseSession =
 
 async (req,res)=>{
 
-const session=
+const owner = req.body.owner || "WEB";
+
+const session =
 
 await FocusSession.findById(
 
@@ -350,8 +353,37 @@ throw new ExpressError(
 
 }
 
-session.status="paused";
+if (session.owner === "DESKTOP" && owner !== "DESKTOP") {
 
+throw new ExpressError(
+
+409,
+
+"Session is controlled by the desktop client"
+
+);
+
+}
+
+const elapsedMinutes = session.startedAt
+  ? Math.max(
+      0,
+      (Date.now() - session.startedAt.getTime()) / 60000
+    )
+  : 0;
+
+const baseDuration =
+  session.remainingDuration != null
+    ? session.remainingDuration
+    : session.plannedDuration;
+
+const remaining = Math.max(
+  0,
+  baseDuration - elapsedMinutes
+);
+
+session.remainingDuration = remaining;
+session.status = "paused";
 await session.save();
 
 clearSessionTimer(
@@ -366,7 +398,10 @@ session:session._id,
 
 user:session.user,
 
-type:"SESSION_PAUSED"
+type:"SESSION_PAUSED",
+metadata:{
+  remainingDuration: remaining
+}
 
 });
 
@@ -384,6 +419,8 @@ module.exports.resumePausedSession=
 
 async(req,res)=>{
 
+const owner = req.body.owner || "WEB";
+
 const session=
 
 await FocusSession.findById(
@@ -392,8 +429,32 @@ req.params.id
 
 );
 
-session.status="active";
+if(!session){
+  throw new ExpressError(404, "Session not found");
+}
 
+if (session.owner === "DESKTOP" && owner !== "DESKTOP") {
+
+throw new ExpressError(
+
+409,
+
+"Session is controlled by the desktop client"
+
+);
+
+}
+
+const remaining = Math.max(
+  0,
+  session.remainingDuration != null
+    ? session.remainingDuration
+    : session.plannedDuration
+);
+
+session.status="active";
+session.startedAt = new Date();
+session.remainingDuration = remaining;
 await session.save();
 
 const io=
@@ -406,7 +467,7 @@ io,
 
 session._id.toString(),
 
-session.plannedDuration
+remaining
 
 );
 
@@ -416,7 +477,8 @@ session:session._id,
 
 user:session.user,
 
-type:"SESSION_RESUMED"
+type:"SESSION_RESUMED",
+metadata:{ remainingDuration: remaining }
 
 });
 
@@ -442,13 +504,25 @@ req.params.id
 
 );
 
-session.status="completed";
+session.status="skipped";
 
 session.completedBy="SYSTEM";
 
 session.endedAt=new Date();
 
 await session.save();
+
+await Task.findByIdAndUpdate(
+
+session.task,
+
+{
+
+status:"skipped"
+
+}
+
+);
 
 clearSessionTimer(
 

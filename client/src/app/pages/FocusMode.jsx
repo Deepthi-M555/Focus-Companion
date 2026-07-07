@@ -9,9 +9,6 @@ import {
 } from "../services/scheduleService";
 
 import {
-    startSession,
-    completeSession,
-    snoozeSession,
     failSession,
     resumeSession,
     pauseSession,
@@ -36,7 +33,7 @@ export function FocusMode() {
   const [personality, setPersonality] = useState("GENTLE");
   const [currentTaskIndex, setCurrentTaskIndex] = useState(1);
   const [totalTasks, setTotalTasks] = useState(1);
-  const [currentTaskTitle, setCurrentTaskTitle] = useState("Current Focus Task");
+  const [currentTaskTitle, setCurrentTaskTitle] = useState("No active task");
 
   // Formatting time
   const formatTime = (seconds) => {
@@ -55,13 +52,10 @@ export function FocusMode() {
       ? todaysTasks.findIndex(task => (task._id || task.id || task.taskId) === (firstTask._id || firstTask.id || firstTask.taskId)) + 1
       : 1;
     const taskTotal = todaysTasks.length || 1;
-    const taskTitle = firstTask?.title || firstTask?.name || "Current Focus Task";
-
     setCurrentTaskIndex(taskIndex);
     setTotalTasks(taskTotal);
-    setCurrentTaskTitle(taskTitle);
 
-    return { firstTask, taskIndex, taskTotal, taskTitle };
+    return { firstTask, taskIndex, taskTotal };
   };
 
   const handlePause = async () => {
@@ -76,19 +70,21 @@ export function FocusMode() {
 
         if(isPaused){
 
-            await resumePausedSession(
+            const response = await resumePausedSession(
 
                 sessionId
 
             );
+            setTimeLeft(getSessionTimeLeftSeconds(response.session));
 
         }else{
 
-            await pauseSession(
+            const response = await pauseSession(
 
                 sessionId
 
             );
+            setTimeLeft(getSessionTimeLeftSeconds(response.session));
 
         }
 
@@ -108,23 +104,12 @@ export function FocusMode() {
 
   };
 
-  const handleComplete = async () => {
-    if (!sessionId) return;
-    try {
-      await completeSession(sessionId);
-      toast.success("Focus session completed.");
-      navigate("/dashboard");
-    } catch (error) {
-      toast.error("Unable to complete the focus session.");
-    }
-  };
-
   const handleEndSession = async () => {
     if (!sessionId) return;
     try {
       await failSession(sessionId);
       toast.success("Focus session ended.");
-      navigate("/dashboard");
+      navigate("/recovery");
     } catch (error) {
       toast.error("Unable to end the focus session.");
     }
@@ -152,20 +137,23 @@ export function FocusMode() {
   const getSessionTimeLeftSeconds = (session) => {
     if (!session) return 0;
 
-    const remainingMinutes = Number(session.remainingDuration ?? 0);
-    if (remainingMinutes > 0) {
-      return Math.max(0, Math.round(remainingMinutes * 60));
+    const baseMinutes = Number(
+      session.remainingDuration ?? session.plannedDuration ?? 0
+    );
+
+    if (session.status === "paused" || session.status === "check_in_pending") {
+      return Math.max(0, Math.round(baseMinutes * 60));
     }
 
-    if (session.startedAt && Number.isFinite(session.plannedDuration)) {
+    if (session.startedAt && Number.isFinite(baseMinutes)) {
       const elapsedSeconds = Math.max(
         0,
         Math.floor((Date.now() - new Date(session.startedAt).getTime()) / 1000)
       );
-      return Math.max(0, Math.round(session.plannedDuration * 60 - elapsedSeconds));
+      return Math.max(0, Math.round(baseMinutes * 60 - elapsedSeconds));
     }
 
-    return Math.max(0, Math.round((session.plannedDuration ?? 0) * 60));
+    return Math.max(0, Math.round(baseMinutes * 60));
   };
 
   useEffect(() => {
@@ -177,7 +165,7 @@ export function FocusMode() {
 
         if (response.session) {
           const activeTask = response.session.task;
-          const activeTaskTitle = activeTask?.title || activeTask?.name || "Current Focus Task";
+          const activeTaskTitle = activeTask?.title || activeTask?.name || "No active task";
 
           const activeTaskId = activeTask?._id || activeTask?.id || activeTask?.taskId;
           const indexFromSchedule = scheduleItems.findIndex(
@@ -191,54 +179,17 @@ export function FocusMode() {
           setSessionId(response.session._id);
           setIsPaused(response.session.status === "paused");
 
-          const taskDuration = activeTask?.estimatedDuration ?? response.session.plannedDuration;
-          setPlannedDuration(taskDuration * 60);
+          setPlannedDuration((response.session.plannedDuration ?? activeTask?.estimatedDuration ?? 0) * 60);
           setTimeLeft(getSessionTimeLeftSeconds(response.session));
-
-          sessionStorage.removeItem("pendingSchedule");
-
-          connectSocket();
-          socket.emit("join_focus_session", response.session._id);
           return;
         }
 
-        const { firstTask } = taskProgress;
-        if (!firstTask) {
-          toast.error("Save a timetable before starting focus mode.");
-          navigate("/timetable");
-          return;
-        }
-
-        if (!Number.isFinite(firstTask.estimatedDuration) || firstTask.estimatedDuration <= 0) {
-          throw new Error("Timetable task missing a valid duration.");
-        }
-
-        const sessionResponse = await startSession({
-          taskId: firstTask._id,
-          duration: firstTask.estimatedDuration,
-          mode
-        });
-
-        const returnedSession = sessionResponse.session;
-        const activeTask = returnedSession?.task || firstTask;
-        const activeTaskTitle = activeTask?.title || activeTask?.name || "Current Focus Task";
-        const sessionSeconds = getSessionTimeLeftSeconds(returnedSession) || firstTask.estimatedDuration * 60;
-
-        setCurrentTaskIndex(taskProgress.taskIndex);
-        setTotalTasks(Math.max(taskProgress.taskTotal, 1));
-        setCurrentTaskTitle(activeTaskTitle);
-        setSessionId(returnedSession._id);
-        setPlannedDuration((returnedSession.plannedDuration ?? firstTask.estimatedDuration) * 60);
-        setTimeLeft(sessionSeconds);
-
-        sessionStorage.removeItem("pendingSchedule");
-
-        connectSocket();
-        socket.emit("join_focus_session", session.session._id);
+        toast.error("Start focus from your timetable.");
+        navigate("/timetable");
       } catch (error) {
         console.error("FocusMode error", error);
         toast.error(
-          error?.response?.data?.error?.message || error.message || "Unable to start focus mode."
+          error?.response?.data?.error?.message || error.message || "Unable to load focus mode."
         );
         navigate("/timetable");
       }
@@ -257,6 +208,25 @@ export function FocusMode() {
     if (!sessionId) {
         return;
     }
+
+    const joinSessionRoom = () => {
+        socket.emit(
+            "join_focus_session",
+            sessionId
+        );
+    };
+
+    connectSocket();
+
+    if (socket.connected) {
+        joinSessionRoom();
+    }
+
+    socket.on(
+        "connect",
+        joinSessionRoom
+    );
+
     const interval =
         setInterval(() => {
             socket.emit(
@@ -268,6 +238,11 @@ export function FocusMode() {
             );
         },30000);
     return () => {
+
+        socket.off(
+            "connect",
+            joinSessionRoom
+        );
 
         clearInterval(interval);
     };
@@ -470,7 +445,7 @@ export function FocusMode() {
 
         {/* Current Task Details */}
         <div className="text-center max-w-md px-6">
-          <h2 className="text-2xl font-medium mb-2">Current Focus Task</h2>
+          <h2 className="text-2xl font-medium mb-2">Current Task</h2>
           <p className={`text-sm ${mode === "gentle" ? "text-blue-600 dark:text-blue-400" : "text-orange-600 dark:text-orange-400"}`}>
             {mode === "gentle" 
               ? "You're doing great. Stay focused, you got this." 

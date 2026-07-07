@@ -1,4 +1,5 @@
 const FocusSession = require("../models/FocusSession");
+const Task = require("../models/Task");
 const SessionEvent = require("../models/SessionEvent");
 
 const {
@@ -103,9 +104,21 @@ module.exports = (io, socket) => {
 
                         session.endedAt=new Date();
 
-                        session.actualDuration=session.plannedDuration;
+                        const elapsedMinutes = session.startedAt
+                            ? Math.max(0, Math.floor((Date.now() - session.startedAt.getTime()) / 60000))
+                            : 0;
+
+                        session.actualDuration = elapsedMinutes;
 
                         await session.save();
+
+                        await Task.findByIdAndUpdate(
+                            session.task,
+                            {
+                                status: "completed",
+                                completed: true
+                            }
+                        );
 
                         await SessionEvent.create({
 
@@ -147,6 +160,10 @@ module.exports = (io, socket) => {
 
                             session.completedBy =
                                 "RECOVERY";
+
+                            if (session.distractionCount < 1) {
+                                session.distractionCount += 1;
+                            }
 
                             await session.save();
 
@@ -216,6 +233,10 @@ module.exports = (io, socket) => {
 
                         session.status=
                             result.nextState;
+
+                        if (session.distractionCount < 1) {
+                            session.distractionCount += 1;
+                        }
 
                         session.completedBy="RECOVERY";
 

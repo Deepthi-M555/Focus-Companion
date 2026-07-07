@@ -15,7 +15,6 @@ const {
 
 const {
     startSession,
-    completeSession,
     failSession,
     snoozeSession,
     resumeActiveSession,
@@ -30,12 +29,6 @@ router.post(
   "/start",
   isLoggedIn,
   wrapAsync(startSession)
-);
-
-router.post(
-  "/complete/:id",
-  isLoggedIn,
-  wrapAsync(completeSession)
 );
 
 router.post(
@@ -104,7 +97,6 @@ explicit behavioral actions.
 
 Example:
 
-completeSession()
 failSession()
 snoozeSession()
 
