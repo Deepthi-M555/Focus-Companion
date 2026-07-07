@@ -1,10 +1,13 @@
-import { User, Mail, Lock, Bell, Mic, Monitor, Moon, Sun } from "lucide-react";
+import { User, Mail, Bell, Mic, Monitor, Moon, Sun } from "lucide-react";
+import { useOutletContext } from "react-router-dom";
 import { useTheme } from "../theme.jsx";
-import { Switch } from "../components/ui/Switch.jsx";
 import { Button } from "../components/ui/Button.jsx";
 import { Select } from "../components/ui/Select.jsx";
+import { Switch } from "../components/ui/Switch.jsx";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { ProfileAvatar } from "../components/ProfileAvatar.jsx";
+import { getCurrentUser } from "../services/userService";
 import {
     getSettings,
     updateSettings,
@@ -12,11 +15,45 @@ import {
     changePassword
 } from "../services/settingsService";
 
+function PermissionRow({ icon, title, description, status, checked, disabled, onCheckedChange }) {
+  return (
+    <div className="flex items-center justify-between gap-4 p-4 bg-neutral-50 dark:bg-neutral-900/50 rounded-xl border border-neutral-200 dark:border-neutral-800">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="p-2 bg-white dark:bg-neutral-800 rounded-lg shadow-sm">
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{title}</p>
+          <p className="text-xs text-neutral-500">{description}</p>
+        </div>
+      </div>
+      <Switch
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={onCheckedChange}
+      />
+    </div>
+  );
+}
+
 export function Settings() {
   const { theme, toggleTheme } = useTheme();
+  const outletContext = useOutletContext() || {};
+  const sharedProfile = outletContext.profile || {
+    name: "",
+    email: "",
+    avatar: ""
+  };
+  const setSharedProfile = outletContext.setProfile;
   const [profile,setProfile]=useState({
-    name:"",
-    email:""
+    name: sharedProfile.name || "",
+    email: sharedProfile.email || "",
+    avatar: sharedProfile.avatar || ""
+  });
+  const [permissions, setPermissions] = useState({
+    microphone: "not_available",
+    notifications: "not_available",
+    alwaysOnTop: "not_available"
   });
   
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -43,15 +80,63 @@ export function Settings() {
 
 const [savingPreferences, setSavingPreferences] = useState(false);
 
+  const syncPermissions = async () => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const notifications =
+      typeof window !== "undefined" && "Notification" in window
+        ? (window.Notification.permission === "granted" ? "granted" : "denied")
+        : "not_available";
+
+    try {
+      const electronStatus = await window.electronAPI?.getPermissionStatus?.();
+      setPermissions({
+        microphone: electronStatus?.microphone || "not_available",
+        notifications,
+        alwaysOnTop: electronStatus?.alwaysOnTop || "not_available"
+      });
+    } catch {
+      setPermissions({
+        microphone: "not_available",
+        notifications,
+        alwaysOnTop: "not_available"
+      });
+    }
+  };
+
+  useEffect(() => {
+    setProfile({
+      name: sharedProfile.name || "",
+      email: sharedProfile.email || "",
+      avatar: sharedProfile.avatar || ""
+    });
+  }, [sharedProfile.name, sharedProfile.email, sharedProfile.avatar]);
+
+  useEffect(() => {
+    async function loadProfile() {
+      try {
+        const user = await getCurrentUser();
+        const nextProfile = {
+          name: user.name || user.email || "User",
+          email: user.email || "",
+          avatar: user.avatar || ""
+        };
+        setSharedProfile?.(nextProfile);
+        setProfile(nextProfile);
+      } catch {
+        toast.error("Unable to load profile.");
+      }
+    }
+
+    loadProfile();
+  }, [setSharedProfile]);
+
   useEffect(() => {
     async function loadSettings() {
         try {
             const data = await getSettings();
-
-            setProfile({
-                name: data.name || "",
-                email: data.email || ""
-            });
 
             setMicEnabled(data.micEnabled?? true);
             setNotificationsEnabled(data.notificationsEnabled?? true);
@@ -66,11 +151,15 @@ const [savingPreferences, setSavingPreferences] = useState(false);
             );
 
         } catch (error) {
-            console.error(error);
+            toast.error("Unable to load settings.");
         }
     }
 
     loadSettings();
+  }, []);
+
+  useEffect(() => {
+    void syncPermissions();
   }, []);
 
   return (
@@ -87,21 +176,10 @@ const [savingPreferences, setSavingPreferences] = useState(false);
           <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-500 border-b border-neutral-200 dark:border-neutral-800 pb-2">Profile</h3>
           
           <div className="flex items-center gap-6">
-            <div className="relative group cursor-pointer">
-              <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-neutral-200 dark:border-neutral-800">
-                <img 
-                  src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=128&h=128&q=80" 
-                  alt="Profile" 
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="text-xs text-white font-medium">Edit</span>
-              </div>
-            </div>
+            <ProfileAvatar profile={profile} size="lg" />
             
             <div className="flex-1 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-neutral-500">Name</label>
                   <div className="flex items-center bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg px-3 py-2">
@@ -113,9 +191,9 @@ const [savingPreferences, setSavingPreferences] = useState(false);
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-neutral-500">Email</label>
-                  <div className="flex items-center bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg px-3 py-2">
+                  <div className="flex items-center bg-neutral-100 dark:bg-neutral-900/70 border border-neutral-200 dark:border-neutral-800 rounded-lg px-3 py-2">
                     <Mail className="w-4 h-4 text-neutral-400 mr-2" />
-                    <input type="email" value={profile.email} onChange={(e)=> setProfile({...profile, email:e.target.value})} className="bg-transparent border-none outline-none text-sm w-full" />
+                    <input type="email" value={profile.email} readOnly className="bg-transparent border-none outline-none text-sm w-full text-neutral-500 cursor-default" />
                   </div>
                 </div>
               </div>
@@ -131,17 +209,25 @@ const [savingPreferences, setSavingPreferences] = useState(false);
                     onClick={async () => {
                         try {
                           setSavingProfile(true);
-                          await updateProfile(profile);
+                          const updated = await updateProfile({
+                            name: profile.name.trim()
+                          });
+                          const nextProfile = {
+                            ...profile,
+                            name: updated.user?.name || profile.name.trim(),
+                            email: updated.user?.email || profile.email
+                          };
+                          setProfile(nextProfile);
+                          setSharedProfile?.(nextProfile);
                           toast.success("Profile updated.");
                         } catch (error) {
-                            console.error(error);
-                            toast.error("Unable to update profile.");
+                            toast.error(error?.response?.data?.error?.message || "Unable to update profile.");
                         } finally {
                             setSavingProfile(false);
                         }
                     }}
                     >
-                    Save Changes
+                    Save Profile
                     </Button>
                 </div>
                 {showPasswordModal && (
@@ -226,7 +312,6 @@ const [savingPreferences, setSavingPreferences] = useState(false);
                                       setShowPasswordModal(false);
                                   }
                                   catch(error){
-                                      console.error(error);
                                       toast.error(
                                           error?.response?.data?.error?.message ||
                                           "Failed to change password."
@@ -299,57 +384,88 @@ const [savingPreferences, setSavingPreferences] = useState(false);
           <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-500 border-b border-neutral-200 dark:border-neutral-800 pb-2">Permissions & System</h3>
           
           <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-900/50 rounded-xl border border-neutral-200 dark:border-neutral-800">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white dark:bg-neutral-800 rounded-lg shadow-sm">
-                  <Mic className="w-4 h-4 text-blue-500" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Microphone Access</p>
-                  <p className="text-xs text-neutral-500">Required for voice check-ins</p>
-                </div>
-              </div>
-              <Switch checked={micEnabled} onCheckedChange={setMicEnabled} />
-            </div>
+            <PermissionRow
+              icon={<Mic className="w-4 h-4 text-blue-500" />}
+              title="Microphone"
+              description="Required for voice check-ins"
+              status={permissions.microphone}
+              checked={permissions.microphone === "granted"}
+              disabled={permissions.microphone === "not_available"}
+              onCheckedChange={async (next) => {
+                if (!next) {
+                  toast.message("Microphone permission is managed by the operating system.");
+                  await syncPermissions();
+                  return;
+                }
 
-            <div className="flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-900/50 rounded-xl border border-neutral-200 dark:border-neutral-800">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white dark:bg-neutral-800 rounded-lg shadow-sm">
-                  <Bell className="w-4 h-4 text-orange-500" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Notifications</p>
-                  <p className="text-xs text-neutral-500">Allow desktop notifications</p>
-                </div>
-              </div>
-              <Switch checked={notificationsEnabled} onCheckedChange={setNotificationsEnabled} />
-            </div>
+                try {
+                  const result = await window.electronAPI?.requestMicrophonePermission?.();
+                  if (result?.success) {
+                    toast.success("Microphone permission granted.");
+                  } else {
+                    toast.error(result?.error || "Microphone permission was not granted.");
+                  }
+                  await syncPermissions();
+                } catch {
+                  toast.error("Unable to request microphone permission.");
+                }
+              }}
+            />
 
-            <div className="flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-900/50 rounded-xl border border-neutral-200 dark:border-neutral-800">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white dark:bg-neutral-800 rounded-lg shadow-sm">
-                  <Monitor className="w-4 h-4 text-purple-500" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Desktop Overlay</p>
-                  <p className="text-xs text-neutral-500">Enable always-on-top mini player</p>
-                </div>
-              </div>
-              <Switch checked={overlayEnabled} onCheckedChange={setOverlayEnabled} />
-            </div>
+            <PermissionRow
+              icon={<Bell className="w-4 h-4 text-orange-500" />}
+              title="Notification"
+              description="Desktop notification permission"
+              status={permissions.notifications}
+              checked={permissions.notifications === "granted"}
+              disabled={permissions.notifications === "not_available"}
+              onCheckedChange={async (next) => {
+                if (!next) {
+                  toast.message("Notification permission can only be changed from your browser settings.");
+                  await syncPermissions();
+                  return;
+                }
 
-            <div className="flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-900/50 rounded-xl border border-neutral-200 dark:border-neutral-800">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white dark:bg-neutral-800 rounded-lg shadow-sm">
-                  <Monitor className="w-4 h-4 text-emerald-500" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Launch on Startup</p>
-                  <p className="text-xs text-neutral-500">Open FYNIX when computer starts</p>
-                </div>
-              </div>
-              <Switch checked={startupEnabled} onCheckedChange={setStartupEnabled} />
-            </div>
+                if (typeof window === "undefined" || !("Notification" in window)) {
+                  toast.error("Notifications are unavailable in this environment.");
+                  return;
+                }
+
+                try {
+                  const permission = await window.Notification.requestPermission();
+                  if (permission === "granted") {
+                    toast.success("Notifications enabled.");
+                  } else {
+                    toast.error("Notification permission was not granted.");
+                  }
+                  await syncPermissions();
+                } catch {
+                  toast.error("Unable to request notification permission.");
+                }
+              }}
+            />
+
+            <PermissionRow
+              icon={<Monitor className="w-4 h-4 text-purple-500" />}
+              title="Always On Top"
+              description="Desktop overlay window status"
+              status={permissions.alwaysOnTop}
+              checked={permissions.alwaysOnTop === "granted"}
+              disabled={permissions.alwaysOnTop === "not_available"}
+              onCheckedChange={async (next) => {
+                try {
+                  const result = await window.electronAPI?.setAlwaysOnTop?.(next);
+                  if (result?.success) {
+                    toast.success(next ? "Overlay stays on top." : "Overlay no longer stays on top.");
+                  } else {
+                    toast.error(result?.error || "Unable to update always-on-top mode.");
+                  }
+                  await syncPermissions();
+                } catch {
+                  toast.error("Unable to update always-on-top mode.");
+                }
+              }}
+            />
           </div>
         </section>
 
@@ -372,8 +488,7 @@ const [savingPreferences, setSavingPreferences] = useState(false);
                         await updateSettings(normalizedPayload);
                         toast.success("Preferences updated.");
                     } catch (error) {
-                        console.error(error);
-                        toast.error("Unable to update preferences.");
+                        toast.error(error?.response?.data?.error?.message || "Unable to update preferences.");
                     } finally {
                         setSavingPreferences(false);
                     }

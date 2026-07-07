@@ -48,31 +48,13 @@ module.exports.getSettings = async (req, res) => {
 
 module.exports.updateProfile = async (req, res) => {
 
-    const { name, email } = req.body;
+    const { name } = req.body;
 
-    if (!name || !email) {
-
-        throw new ExpressError(
-            400,
-            "Name and email are required."
-        );
-
-    }
-
-    const existingUser =
-        await User.findOne({
-            email
-        });
-
-    if (
-        existingUser &&
-        existingUser._id.toString() !==
-        req.identity.userId.toString()
-    ) {
+    if (!name) {
 
         throw new ExpressError(
             400,
-            "Email already exists."
+            "Name is required."
         );
 
     }
@@ -83,8 +65,7 @@ module.exports.updateProfile = async (req, res) => {
             req.identity.userId,
 
             {
-                name,
-                email
+                name
             },
 
             {
@@ -99,7 +80,11 @@ module.exports.updateProfile = async (req, res) => {
         message:
             "Profile updated successfully.",
 
-        user
+        user: {
+            name: user.name,
+            email: user.email,
+            avatar: ""
+        }
 
     });
 
@@ -126,13 +111,18 @@ async (req, res) => {
 
     } = req.body;
 
+    const normalizedCheckInFrequency = Number(checkInFrequency);
+    const normalizedSnoozeDuration = Number(snoozeDuration);
+    const normalizedMaxSnoozes = maxSnoozes === -1 ? -1 : Number(maxSnoozes);
+
     if (
 
-        checkInFrequency <= 0 ||
-
-        snoozeDuration <= 0 ||
-
-        maxSnoozes < -1
+        !Number.isFinite(normalizedCheckInFrequency) ||
+        normalizedCheckInFrequency <= 0 ||
+        !Number.isFinite(normalizedSnoozeDuration) ||
+        normalizedSnoozeDuration <= 0 ||
+        !Number.isFinite(normalizedMaxSnoozes) ||
+        normalizedMaxSnoozes < -1
 
     ) {
 
@@ -166,11 +156,11 @@ async (req, res) => {
 
                 startupEnabled,
 
-                checkInFrequency,
+                checkInFrequency: normalizedCheckInFrequency,
 
-                snoozeDuration,
+                snoozeDuration: normalizedSnoozeDuration,
 
-                maxSnoozes
+                maxSnoozes: normalizedMaxSnoozes
 
             },
 
