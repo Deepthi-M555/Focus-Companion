@@ -9,16 +9,16 @@ import {
   Sun, 
   Flame,
   Clock,
-  CheckCircle2,
   ListTodo,
   Brain,
-  Coffee,
-  PlayCircle
 } from "lucide-react";
 import { useTheme } from "../theme.jsx";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "../components/ui/Collapsible.jsx";
 import { getAnalytics } from "../services/analyticsService";
-import { getSettings } from "../services/settingsService";
+import { resumeSession } from "../services/sessionService";
+import { loadTodaySchedule } from "../services/taskService";
+import { getCurrentUser } from "../services/userService";
+import { ProfileAvatar } from "../components/ProfileAvatar.jsx";
 
 export function AppLayout() {
   const { theme, toggleTheme } = useTheme();
@@ -33,7 +33,8 @@ export function AppLayout() {
   const [contextSummary, setContextSummary] = useState({
     plannedHours: 0,
     currentTask: "",
-    focusIntegrity: 0
+    focusIntegrity: 0,
+    todayTasks: []
   });
 
   const navItems = [
@@ -44,26 +45,71 @@ export function AppLayout() {
   ];
 
   useEffect(() => {
-    async function loadProfileAndAnalytics() {
+    let cancelled = false;
+
+    async function loadCoreContext() {
       try {
-        const [settings, analytics] = await Promise.all([getSettings(), getAnalytics()]);
+        const [user, activeSession, schedule] = await Promise.all([
+          getCurrentUser(),
+          resumeSession(),
+          loadTodaySchedule()
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        const activeTask = activeSession?.session?.task;
+        const todayTasks = schedule?.schedule || [];
+        const plannedMinutes = todayTasks.reduce(
+          (sum, task) => sum + Number(task.estimatedDuration || 0),
+          0
+        );
+
         setProfile({
-          name: settings.name || settings.email || "User",
-          email: settings.email || "",
-          avatar: settings.avatar || ""
+          name: user.name || user.email || "User",
+          email: user.email || "",
+          avatar: user.avatar || ""
         });
-        setStreak(analytics?.stats?.streak ?? 0);
-        setContextSummary({
-          plannedHours: analytics?.stats?.focusHours ?? 0,
-          currentTask: analytics?.timeline?.[0]?.title || analytics?.timeline?.[0]?.type || "",
-          focusIntegrity: analytics?.stats?.focusIntegrity ?? 0
-        });
+        setContextSummary((prev) => ({
+          ...prev,
+          plannedHours: Number((plannedMinutes / 60).toFixed(1)),
+          currentTask: activeTask?.title || activeTask?.name || "",
+          todayTasks
+        }));
       } catch {
-        setProfile({ name: "User", email: "", avatar: "" });
+        if (!cancelled) {
+          setProfile({ name: "User", email: "", avatar: "" });
+        }
       }
     }
 
-    loadProfileAndAnalytics();
+    async function loadAnalyticsContext() {
+      try {
+        const analytics = await getAnalytics();
+        if (!cancelled) {
+          setStreak(analytics?.stats?.streak ?? 0);
+          setContextSummary((prev) => ({
+            ...prev,
+            focusIntegrity: analytics?.stats?.focusIntegrity ?? 0
+          }));
+        }
+      } catch {
+        if (!cancelled) {
+          setStreak(0);
+        }
+      }
+    }
+
+    void loadCoreContext();
+    const analyticsTimer = window.setTimeout(() => {
+      void loadAnalyticsContext();
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(analyticsTimer);
+    };
   }, [location.pathname]);
 
   return (
@@ -105,28 +151,20 @@ export function AppLayout() {
               <Flame className="w-4 h-4 text-orange-500" />
               <span className="text-sm font-medium text-orange-700 dark:text-orange-400">Current Streak</span>
             </div>
-            <span className="font-bold text-orange-600 dark:text-orange-500">{streak}</span>
+            <span className="font-bold text-orange-600 dark:text-orange-500">{streak} Days</span>
           </div>
 
-          <div className="flex items-center justify-between px-2">
-            <div className="flex items-center gap-3 cursor-pointer" onClick={()=>navigate("/settings")} >
-              <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 p-0.5 flex items-center justify-center overflow-hidden">
-                {profile.avatar ? (
-                  <img src={profile.avatar} alt="User" className="w-full h-full rounded-full object-cover" />
-                ) : (
-                  <span className="text-sm font-semibold text-white">
-                    {(profile.name || profile.email || "U").charAt(0).toUpperCase()}
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm font-medium leading-none">{profile.name || "User"}</span>
-                <span className="text-xs text-neutral-500 mt-1">{profile.email || "Active user"}</span>
+          <div className="flex items-center justify-between gap-2 px-2">
+            <div className="min-w-0 flex flex-1 items-center gap-3 cursor-pointer" onClick={()=>navigate("/settings")} >
+              <ProfileAvatar profile={profile} />
+              <div className="min-w-0 flex flex-col justify-center">
+                <span className="truncate text-sm font-medium leading-tight">{profile.name || "User"}</span>
+                <span className="truncate text-xs text-neutral-500 leading-tight mt-1">{profile.email || "Active user"}</span>
               </div>
             </div>
             <button 
               onClick={toggleTheme}
-              className="p-2 rounded-full hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
             >
               {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
@@ -136,7 +174,7 @@ export function AppLayout() {
 
       {/* CENTER WORKSPACE */}
       <main className="flex-1 flex flex-col relative z-10 overflow-hidden">
-        <Outlet />
+        <Outlet context={{ profile, setProfile }} />
       </main>
 
       {/* RIGHT CONTEXT PANEL */}
@@ -145,99 +183,7 @@ export function AppLayout() {
           <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Today's Context</h3>
           
           <div className="space-y-4">
-            {location.pathname === "/focus" ? (
-              <>
-                {/* Focus Mode Cards */}
-                <Collapsible defaultOpen>
-                  <div className="rounded-2xl bg-white/60 dark:bg-neutral-900/40 backdrop-blur-xl border border-neutral-200/50 dark:border-neutral-800/50 shadow-sm transition-all hover:shadow-md overflow-hidden">
-                    <CollapsibleTrigger className="w-full p-4 flex items-center justify-between cursor-pointer hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <Target className="w-5 h-5 text-purple-500" />
-                        <span className="font-medium text-sm">Current Task</span>
-                      </div>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="px-4 pb-4">
-                      <p className="text-neutral-600 dark:text-neutral-300 text-sm leading-relaxed font-medium">
-                        {contextSummary.currentTask || "No active task"}
-                      </p>
-                      <p className="text-xs text-neutral-500 mt-1">
-                        {contextSummary.plannedHours > 0 ? `${contextSummary.plannedHours} hrs planned today` : "No planned work yet"}
-                      </p>
-                    </CollapsibleContent>
-                  </div>
-                </Collapsible>
-
-                <Collapsible defaultOpen>
-                  <div className="rounded-2xl bg-white/60 dark:bg-neutral-900/40 backdrop-blur-xl border border-neutral-200/50 dark:border-neutral-800/50 shadow-sm transition-all hover:shadow-md overflow-hidden">
-                    <CollapsibleTrigger className="w-full p-4 flex items-center justify-between cursor-pointer hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <Coffee className="w-5 h-5 text-orange-500" />
-                        <span className="font-medium text-sm">Upcoming Break</span>
-                      </div>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="px-4 pb-4">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-neutral-600 dark:text-neutral-400">Next recovery window</span>
-                        <span className="font-medium text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-2 py-1 rounded-md">{contextSummary.focusIntegrity}% integrity</span>
-                      </div>
-                    </CollapsibleContent>
-                  </div>
-                </Collapsible>
-
-                <Collapsible defaultOpen>
-                  <div className="rounded-2xl bg-white/60 dark:bg-neutral-900/40 backdrop-blur-xl border border-neutral-200/50 dark:border-neutral-800/50 shadow-sm transition-all hover:shadow-md overflow-hidden">
-                    <CollapsibleTrigger className="w-full p-4 flex items-center justify-between cursor-pointer hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <PlayCircle className="w-5 h-5 text-blue-500" />
-                        <span className="font-medium text-sm">Next Focus Block</span>
-                      </div>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="px-4 pb-4">
-                      <p className="text-sm font-medium text-blue-700 dark:text-blue-400">{contextSummary.currentTask || "No upcoming focus block"}</p>
-                      <p className="text-xs text-neutral-500 mt-1">{contextSummary.plannedHours > 0 ? `${contextSummary.plannedHours} hrs planned` : "Add tasks to plan your day"}</p>
-                    </CollapsibleContent>
-                  </div>
-                </Collapsible>
-
-                <Collapsible defaultOpen>
-                  <div className="rounded-2xl bg-white/60 dark:bg-neutral-900/40 backdrop-blur-xl border border-neutral-200/50 dark:border-neutral-800/50 shadow-sm transition-all hover:shadow-md overflow-hidden">
-                    <CollapsibleTrigger className="w-full p-4 flex items-center justify-between cursor-pointer hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <ListTodo className="w-5 h-5 text-neutral-500" />
-                        <span className="font-medium text-sm">Remaining Schedule</span>
-                      </div>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="px-4 pb-4">
-                      <ul className="space-y-3 relative before:absolute before:inset-y-2 before:left-2 before:w-px before:bg-neutral-200 dark:before:bg-neutral-800">
-                        <li className="flex items-start gap-4 text-sm relative">
-                          <div className="w-4 h-4 rounded-full bg-blue-500 border-4 border-white dark:border-[#121212] z-10" />
-                          <div className="-mt-1">
-                            <p className="font-medium">Deep Work</p>
-                            <p className="text-xs text-neutral-500">Currently active</p>
-                          </div>
-                        </li>
-                        <li className="flex items-start gap-4 text-sm relative">
-                          <div className="w-4 h-4 rounded-full bg-neutral-200 dark:bg-neutral-700 border-4 border-white dark:border-[#121212] z-10" />
-                          <div className="-mt-1 text-neutral-500">
-                            <p>Break</p>
-                            <p className="text-xs">15m</p>
-                          </div>
-                        </li>
-                        <li className="flex items-start gap-4 text-sm relative">
-                          <div className="w-4 h-4 rounded-full bg-neutral-200 dark:bg-neutral-700 border-4 border-white dark:border-[#121212] z-10" />
-                          <div className="-mt-1 text-neutral-500">
-                            <p>Deep Work</p>
-                            <p className="text-xs">90m</p>
-                          </div>
-                        </li>
-                      </ul>
-                    </CollapsibleContent>
-                  </div>
-                </Collapsible>
-              </>
-            ) : (
-              <>
-                {/* Glass Card 1 */}
+            <>
                 <Collapsible defaultOpen>
                   <div className="rounded-2xl bg-white/60 dark:bg-neutral-900/40 backdrop-blur-xl border border-neutral-200/50 dark:border-neutral-800/50 shadow-sm transition-all hover:shadow-md overflow-hidden">
                     <CollapsibleTrigger className="w-full p-4 flex items-center justify-between cursor-pointer hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30 transition-colors">
@@ -251,14 +197,10 @@ export function AppLayout() {
                         <span className="text-3xl font-light tracking-tighter">{contextSummary.plannedHours}</span>
                         <span className="text-neutral-500 mb-1 text-sm">hrs</span>
                       </div>
-                      <div className="mt-3 w-full bg-neutral-200 dark:bg-neutral-800 rounded-full h-1.5">
-                        <div className="bg-blue-500 h-1.5 rounded-full w-[45%]"></div>
-                      </div>
                     </CollapsibleContent>
                   </div>
                 </Collapsible>
 
-                {/* Glass Card 2 */}
                 <Collapsible defaultOpen>
                   <div className="rounded-2xl bg-white/60 dark:bg-neutral-900/40 backdrop-blur-xl border border-neutral-200/50 dark:border-neutral-800/50 shadow-sm transition-all hover:shadow-md overflow-hidden">
                     <CollapsibleTrigger className="w-full p-4 flex items-center justify-between cursor-pointer hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30 transition-colors">
@@ -271,15 +213,41 @@ export function AppLayout() {
                       <p className="text-neutral-600 dark:text-neutral-300 text-sm leading-relaxed">
                         {contextSummary.currentTask || "No active task"}
                       </p>
-                      <div className="mt-4 flex items-center gap-2 text-xs font-medium text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-3 py-1.5 rounded-full w-fit">
-                        <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"></div>
-                        In Progress
-                      </div>
+                      {contextSummary.currentTask && (
+                        <div className="mt-4 flex items-center gap-2 text-xs font-medium text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-3 py-1.5 rounded-full w-fit">
+                          <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"></div>
+                          In Progress
+                        </div>
+                      )}
                     </CollapsibleContent>
                   </div>
                 </Collapsible>
 
-                {/* Glass Card 3 */}
+                <Collapsible defaultOpen>
+                  <div className="rounded-2xl bg-white/60 dark:bg-neutral-900/40 backdrop-blur-xl border border-neutral-200/50 dark:border-neutral-800/50 shadow-sm transition-all hover:shadow-md overflow-hidden">
+                    <CollapsibleTrigger className="w-full p-4 flex items-center justify-between cursor-pointer hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <ListTodo className="w-5 h-5 text-neutral-500" />
+                        <span className="font-medium text-sm">Today's Tasks</span>
+                      </div>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="px-4 pb-4">
+                      {contextSummary.todayTasks.length === 0 ? (
+                        <p className="text-sm text-neutral-500">No tasks scheduled today.</p>
+                      ) : (
+                        <ul className="space-y-3">
+                          {contextSummary.todayTasks.map(task => (
+                            <li key={task._id} className="flex items-start justify-between gap-3 text-sm">
+                              <span className="min-w-0 truncate text-neutral-700 dark:text-neutral-200">{task.title}</span>
+                              <span className="flex-shrink-0 text-xs text-neutral-500">{task.estimatedDuration}m</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </CollapsibleContent>
+                  </div>
+                </Collapsible>
+
                 <Collapsible defaultOpen>
                   <div className="rounded-2xl bg-white/60 dark:bg-neutral-900/40 backdrop-blur-xl border border-neutral-200/50 dark:border-neutral-800/50 shadow-sm transition-all hover:shadow-md overflow-hidden">
                     <CollapsibleTrigger className="w-full p-4 flex items-center justify-between cursor-pointer hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30 transition-colors">
@@ -297,7 +265,6 @@ export function AppLayout() {
                   </div>
                 </Collapsible>
               </>
-            )}
           </div>
         </div>
       </aside>
