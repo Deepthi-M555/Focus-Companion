@@ -31,6 +31,31 @@ new mongoose.Schema({
     default: null
   },
 
+  originalPlannedMinutes: {
+    type: Number,
+    default: 0
+  },
+
+  totalPlannedMinutes: {
+    type: Number,
+    default: 0
+  },
+
+  scheduleGeneratedAt: {
+    type: Date,
+    default: Date.now
+  },
+
+  originalTaskCount: {
+    type: Number,
+    default: 0
+  },
+
+  extraMinutesAdded: {
+    type: Number,
+    default: 0
+  },
+
   owner: {
     type: String,
     enum: ["WEB", "DESKTOP"],

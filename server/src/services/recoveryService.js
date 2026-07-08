@@ -1,11 +1,13 @@
 const Task = require("../models/Task");
 const FocusSession = require("../models/FocusSession");
+const User = require("../models/User");
 
 function recoverSchedule({
 
     remainingTasks,
 
-    availableMinutes
+    availableMinutes,
+    regenerate = false
 
 }) {
 
@@ -25,6 +27,7 @@ function recoverSchedule({
         );
 
     if (
+        !regenerate ||
         totalWork <=
         availableMinutes
     ) {
@@ -124,30 +127,105 @@ function recoverSchedule({
 
 }
 
+async function getRecoverySummary({ userId }) {
+
+    const activeSession = await FocusSession.findOne({
+        user: userId,
+        status: {
+            $in: [
+                "active",
+                "paused",
+                "check_in_pending",
+                "snoozed"
+            ]
+        }
+    });
+
+    const elapsedMinutes = activeSession
+        ? Math.max(0, Number(activeSession.totalPlannedMinutes || 0) - Number(activeSession.remainingDuration || 0))
+        : 0;
+
+    const originalPlannedMinutes = Number(activeSession?.originalPlannedMinutes || activeSession?.totalPlannedMinutes || 0);
+    const remainingPlannedMinutes = Math.max(0, Number(activeSession?.totalPlannedMinutes || 0) - elapsedMinutes);
+
+    const tasks = await Task.find({
+        userId,
+        completed: false,
+        status: {
+            $ne: "skipped"
+        }
+    }).sort({
+        sequenceOrder: 1,
+        createdAt: 1
+    });
+
+    const fallbackMinutes = tasks.reduce((sum, task) => sum + Number(task.estimatedDuration || 0), 0);
+    const finalOriginalPlannedMinutes = originalPlannedMinutes || fallbackMinutes;
+    const finalRemainingPlannedMinutes = remainingPlannedMinutes || fallbackMinutes;
+
+    return {
+        success: true,
+        originalPlannedMinutes: finalOriginalPlannedMinutes,
+        remainingPlannedMinutes: finalRemainingPlannedMinutes,
+        totalPlannedMinutes: finalOriginalPlannedMinutes,
+        extraMinutesAdded: Number(activeSession?.extraMinutesAdded || 0)
+    };
+
+}
+
 async function regenerateRecoverySchedule({
 
     userId,
 
     remainingTasks,
 
-    availableMinutes = 480
+    extraMinutes = 0
 
 }) {
+
+    const activeSession = await FocusSession.findOne({
+        user: userId,
+        status: {
+            $in: [
+                "active",
+                "paused",
+                "check_in_pending",
+                "snoozed"
+            ]
+        }
+    });
+
+    const elapsedMinutes = activeSession
+        ? Math.max(0, Number(activeSession.totalPlannedMinutes || 0) - Number(activeSession.remainingDuration || 0))
+        : 0;
+    const remainingPlannedMinutes = Math.max(0, Number(activeSession?.totalPlannedMinutes || 0) - elapsedMinutes);
+    const availableMinutes = remainingPlannedMinutes + Number(extraMinutes || 0);
 
     const tasks =
         remainingTasks ||
         await Task.find({
             userId,
-            completed: false
+            completed: false,
+            status: {
+                $ne: "skipped"
+            }
         }).sort({
             sequenceOrder: 1,
             createdAt: 1
         });
 
+    if (activeSession) {
+        activeSession.extraMinutesAdded += Number(extraMinutes || 0);
+        activeSession.totalPlannedMinutes = Number(activeSession.originalPlannedMinutes || activeSession.totalPlannedMinutes || 0) + activeSession.extraMinutesAdded;
+        await activeSession.save();
+    }
+
     const recovered =
         recoverSchedule({
+            userId,
             remainingTasks: tasks,
-            availableMinutes
+            availableMinutes,
+            regenerate: true
         });
 
     await Promise.all(
@@ -163,7 +241,13 @@ async function regenerateRecoverySchedule({
         success: true,
         tasks: recovered.tasks,
         recovered: recovered.recovered,
-        suggestions: recovered.suggestions
+        suggestions: recovered.suggestions,
+        totalPlannedMinutes: Number(activeSession?.totalPlannedMinutes || 0),
+        originalPlannedMinutes: Number(activeSession?.originalPlannedMinutes || activeSession?.totalPlannedMinutes || 0),
+        elapsedMinutes,
+        remainingPlannedMinutes,
+        availableMinutes,
+        extraMinutesAdded: Number(activeSession?.extraMinutesAdded || 0)
     };
 
 }
@@ -180,12 +264,7 @@ async function resumeFromRecovery({
         await Task.findOne({
             userId,
             completed: false,
-            status: {
-                $in: [
-                    "in_progress",
-                    "paused"
-                ]
-            }
+            status: "in_progress"
         }).sort({
             updatedAt: -1
         });
@@ -214,6 +293,18 @@ async function resumeFromRecovery({
     let session = {};
 
     if (nextTask) {
+        const activeSession = await FocusSession.findOne({
+            user: userId,
+            status: {
+                $in: [
+                    "active",
+                    "paused",
+                    "check_in_pending",
+                    "snoozed"
+                ]
+            }
+        });
+
         await FocusSession.updateMany(
             {
                 user: userId,
@@ -237,11 +328,23 @@ async function resumeFromRecovery({
             task: nextTask._id,
             plannedDuration: Number(nextTask.estimatedDuration || 25),
             remainingDuration: Number(nextTask.estimatedDuration || 25),
+            originalPlannedMinutes: Number(activeSession?.originalPlannedMinutes || activeSession?.totalPlannedMinutes || 0),
+            totalPlannedMinutes: Number(activeSession?.totalPlannedMinutes || 0),
+            scheduleGeneratedAt: activeSession?.scheduleGeneratedAt || new Date(),
+            originalTaskCount: Number(await Task.countDocuments({ userId, completed: false })),
+            extraMinutesAdded: activeSession ? Number(activeSession.extraMinutesAdded || 0) : 0,
             status: "active",
             startedAt: new Date(),
             owner: clientType || "WEB",
             mode: userMode || "gentle"
         });
+
+        await User.findByIdAndUpdate(
+            userId,
+            {
+                activeSessionId: session._id
+            }
+        );
     }
 
     return {
@@ -256,8 +359,99 @@ async function resumeFromRecovery({
 
 }
 
+async function skipAndResume({
+
+    userId,
+    clientType = "WEB"
+
+}) {
+
+    const session = await FocusSession.findOne({
+        user: userId,
+        status: {
+            $in: [
+                "active",
+                "paused",
+                "check_in_pending",
+                "snoozed"
+            ]
+        }
+    }).populate("task");
+
+    if (!session) {
+        throw new Error("No active session");
+    }
+
+    const currentTaskId = session.task?._id || session.task;
+
+    if (currentTaskId) {
+        await Task.findByIdAndUpdate(
+            currentTaskId,
+            {
+                status: "skipped",
+                completed: true
+            }
+        );
+    }
+
+    session.status = "skipped";
+    session.endedAt = new Date();
+    await session.save();
+
+    const nextTask = await Task.findOne({
+        userId,
+        completed: false,
+        status: "pending"
+    }).sort({
+        sequenceOrder: 1,
+        createdAt: 1
+    });
+
+    if (!nextTask) {
+        return {
+            success: true,
+            nextTask: null
+        };
+    }
+
+    const newSession = await FocusSession.create({
+        user: userId,
+        task: nextTask._id,
+        owner: clientType,
+        mode: session.mode || "gentle",
+        plannedDuration: Number(nextTask.estimatedDuration || 25),
+        remainingDuration: Number(nextTask.estimatedDuration || 25),
+        originalPlannedMinutes: Number(session.originalPlannedMinutes || session.totalPlannedMinutes || 0),
+        totalPlannedMinutes: Number(session.totalPlannedMinutes || 0),
+        originalTaskCount: Number(session.originalTaskCount || 0),
+        extraMinutesAdded: Number(session.extraMinutesAdded || 0),
+        scheduleGeneratedAt: session.scheduleGeneratedAt || new Date(),
+        status: "active",
+        startedAt: new Date()
+    });
+
+    await User.findByIdAndUpdate(
+        userId,
+        {
+            activeSessionId: newSession._id
+        }
+    );
+
+    nextTask.status = "in_progress";
+    await nextTask.save();
+
+    return {
+        success: true,
+        session: newSession,
+        nextTask
+    };
+
+}
+
 module.exports = {
     recoverSchedule,
+    getRecoverySummary,
     regenerateRecoverySchedule,
-    resumeFromRecovery
+    resumeFromRecovery,
+    skipAndResume
 };

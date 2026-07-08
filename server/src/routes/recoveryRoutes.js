@@ -6,13 +6,25 @@ const recoveryController =
 require("../controllers/recoveryController");
 
 const {
-    isLoggedIn
+    isLoggedIn: authenticate
 } = require("../middleware/authMiddleware");
+
+router.get(
+    "/summary",
+    authenticate,
+    recoveryController.summary
+);
 
 router.post(
     "/",
-    isLoggedIn,
+    authenticate,
     recoveryController.recover
+);
+
+router.post(
+    "/skip",
+    authenticate,
+    recoveryController.skipAndResume
 );
 
 module.exports = router;

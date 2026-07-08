@@ -1,7 +1,9 @@
 const {
   recoverSchedule,
   regenerateRecoverySchedule,
-  resumeFromRecovery
+  resumeFromRecovery,
+  skipAndResume,
+  getRecoverySummary
 } =
 require("../services/recoveryService");
 
@@ -28,7 +30,7 @@ async (req, res) => {
     const regenerated = await regenerateRecoverySchedule({
       userId,
       remainingTasks: req.body?.remainingTasks,
-      availableMinutes: req.body?.availableMinutes ?? 480
+      extraMinutes: req.body?.extraMinutes || 0
     });
 
     return res.json(regenerated);
@@ -52,5 +54,36 @@ async (req, res) => {
   );
 
   res.json(recovered);
+
+};
+
+module.exports.skipAndResume =
+async (req, res, next) => {
+
+  try {
+    const result = await skipAndResume({
+      userId: req.identity?.userId,
+      clientType: req.body?.clientType || "WEB"
+    });
+
+    return res.json(result);
+  } catch (error) {
+    next(error);
+  }
+
+};
+
+module.exports.summary =
+async (req, res, next) => {
+
+  try {
+    const result = await getRecoverySummary({
+      userId: req.identity?.userId
+    });
+
+    return res.json(result);
+  } catch (error) {
+    next(error);
+  }
 
 };
