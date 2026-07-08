@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { Play, Pause, Maximize2, X } from "lucide-react";
 import { motion } from "motion/react";
+import SpeechRecognitionService from "../services/speechRecognition";
+import {requestMicrophonePermission} from "../services/microphoneService";
 
 // This simulates the always-on-top frameless Electron window
 export function Overlay() {
