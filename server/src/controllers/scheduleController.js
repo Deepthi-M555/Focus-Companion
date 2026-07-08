@@ -17,35 +17,15 @@ async (req, res) => {
 
     });
 
-  const elasticTasks =
-    tasks.filter(
-      task =>
-        task.type ===
-        "ELASTIC"
-    );
-
-  const inelasticTasks =
-    tasks.filter(
-      task =>
-        task.type ===
-        "INELASTIC"
-    );
+  if (!tasks.length) {
+    return res.json({
+      schedule: []
+    });
+  }
 
   const schedule =
-    generateSchedule({
+    generateSchedule(tasks);
 
-      elasticTasks,
-
-      inelasticTasks,
-
-      dayStart:
-        new Date(),
-
-      dayEnd:
-        new Date()
-
-    });
-
-  res.json(schedule);
+  res.json({ schedule });
 
 };

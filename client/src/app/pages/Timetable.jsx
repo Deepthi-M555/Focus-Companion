@@ -14,6 +14,10 @@ import { Button } from "../components/ui/Button.jsx";
 import { useEffect } from "react";
 import { getSchedule } from "../services/scheduleService";
 import { saveSchedule } from "../services/taskService";
+import {
+  startSession,
+  failSession
+} from "../services/sessionService";
 import { toast } from "sonner";
 
 export function Timetable() {
@@ -21,17 +25,13 @@ export function Timetable() {
 
   const [blocks, setBlocks] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [activeConflict, setActiveConflict] = useState(null);
+  const [pendingStartTask, setPendingStartTask] = useState(null);
+  const [isResolvingConflict, setIsResolvingConflict] = useState(false);
 
   useEffect(() => {
     async function loadSchedule() {
         try {
-            const pendingSchedule = sessionStorage.getItem("pendingSchedule");
-
-            if (pendingSchedule) {
-                setBlocks(JSON.parse(pendingSchedule));
-                return;
-            }
-
             const response = await getSchedule();
             setBlocks(response.schedule || []);
         } catch (error) {
@@ -42,19 +42,91 @@ export function Timetable() {
     loadSchedule();
 }, []);
 
+  const getFirstStartableTask = (tasks = []) => {
+    return tasks.find(task => task.status === "pending") || tasks[0] || null;
+  };
+
+  const startFocusForTask = async (task) => {
+    if (!task?._id) {
+      throw new Error("Timetable task was not saved.");
+    }
+
+    if (!Number.isFinite(task.estimatedDuration) || task.estimatedDuration <= 0) {
+      throw new Error("Timetable task missing a valid duration.");
+    }
+
+    try {
+      await startSession({
+        taskId: task._id,
+        duration: task.estimatedDuration,
+        mode: "gentle"
+      });
+      navigate("/focus");
+    } catch (error) {
+      if (error.response?.status === 409) {
+        setActiveConflict(error.response.data.session);
+        setPendingStartTask(task);
+        return;
+      }
+
+      throw error;
+    }
+  };
+
   const handleSaveAndStart = async () => {
     setIsSaving(true);
 
     try {
-      sessionStorage.setItem("pendingSchedule", JSON.stringify(blocks));
-      await saveSchedule({ tasks: blocks });
-      sessionStorage.removeItem("pendingSchedule");
+      const response = await saveSchedule({ tasks: blocks });
+      const savedTasks = response.tasks || [];
+      const firstTask = getFirstStartableTask(savedTasks);
+
+      if (!firstTask) {
+        toast.error("Add a task before starting focus mode.");
+        return;
+      }
+
       toast.success("Timetable saved.");
-      navigate("/focus");
+      await startFocusForTask(firstTask);
     } catch (error) {
-      toast.error("Unable to save your timetable.");
+      toast.error(
+        error?.response?.data?.error?.message ||
+        error.message ||
+        "Unable to start focus mode."
+      );
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleResumeExisting = () => {
+    setActiveConflict(null);
+    setPendingStartTask(null);
+    navigate("/focus");
+  };
+
+  const handleCancelConflict = () => {
+    setActiveConflict(null);
+    setPendingStartTask(null);
+  };
+
+  const handleEndPreviousAndStart = async () => {
+    if (!activeConflict?._id || !pendingStartTask) return;
+
+    setIsResolvingConflict(true);
+
+    try {
+      await failSession(activeConflict._id);
+      setActiveConflict(null);
+      await startFocusForTask(pendingStartTask);
+    } catch (error) {
+      toast.error(
+        error?.response?.data?.error?.message ||
+        error.message ||
+        "Unable to replace the active session."
+      );
+    } finally {
+      setIsResolvingConflict(false);
     }
   };
 
@@ -184,6 +256,48 @@ export function Timetable() {
 
         </div>
       </div>
+
+      {activeConflict && (
+        <div className="absolute inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="w-full max-w-md rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 p-6 shadow-2xl">
+            <h3 className="text-xl font-medium mb-2">Active Focus Session Detected</h3>
+            <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-6">
+              {activeConflict.task?.title
+                ? `You already have an active focus session for ${activeConflict.task.title}.`
+                : "You already have an active focus session."}
+            </p>
+
+            <div className="space-y-3">
+              <Button
+                variant="primary"
+                className="w-full"
+                onClick={handleResumeExisting}
+                disabled={isResolvingConflict}
+              >
+                Resume Existing Session
+              </Button>
+
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handleEndPreviousAndStart}
+                disabled={isResolvingConflict}
+              >
+                {isResolvingConflict ? "Ending Previous Session..." : "End Previous Session & Start New"}
+              </Button>
+
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={handleCancelConflict}
+                disabled={isResolvingConflict}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
