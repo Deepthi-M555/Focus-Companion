@@ -1,143 +1,54 @@
+const path = require("path");
+
 const {
+    transcribeAudio
+} = require("../services/whisperClient");
 
-    detectIntent,
+const {
+    deleteRecording
+} = require("../services/recorderService");
 
-    executeIntent
-
-}=require(
-
+const {
+    detectIntent
+} = require(
     "../../services/intentService"
-
 );
 
-const FocusSession=
-
-require(
-
-    "../../models/FocusSession"
-
-);
-
-const CompanionSettings=
-
-require(
-
-    "../../models/CompanionSettings"
-
-);
-
-exports.voiceCheckIn=
-
-async(req,res)=>{
-
-try{
-
-const{
-
-transcript,
-
-sessionId
-
-}=req.body;
-
-if(
-
-!transcript||
-
-!sessionId
-
-){
-
-return res.status(400).json({
-
-success:false,
-
-message:"Transcript and sessionId required."
-
-});
-
-}
-
-const session=
-
-await FocusSession.findById(
-
-sessionId
-
-);
-
-if(!session){
-
-return res.status(404).json({
-
-success:false,
-
-message:"Session not found."
-
-});
-
-}
-
-const settings=
-
-await CompanionSettings.findOne({
-
-userId:session.user
-
-});
-
-const intent=
-
-detectIntent(
-
-transcript
-
-);
-
-const result=
-
-executeIntent({
-
-intent,
-
-currentState:
-
-session.status
-
-});
-
-return res.json({
-
-success:true,
-
-personality:
-
-settings.personality,
-
-intent,
-
-nextState:
-
-result.nextState,
-
-action:
-
-result.action
-
-});
-
-}
-
-catch(error){
-
-return res.status(500).json({
-
-success:false,
-
-message:error.message
-
-});
-
-}
-
+exports.processVoice = async (
+    req,
+    res
+) => {
+    if (!req.file) {
+        return res.status(400).json({
+            success: false,
+            message:
+                "Audio file is required."
+        });
+    }
+    const audioPath =
+        req.file.path;
+    try {
+        const result =
+            await transcribeAudio(
+                audioPath
+            );
+
+        const transcript =
+            result.text;
+
+        const intent =
+            await detectIntent(
+                transcript
+            );
+        return res.json({
+            success: true,
+            transcript,
+            intent
+        });
+    }
+    finally {
+        await deleteRecording(
+            audioPath
+        );
+    }
 };

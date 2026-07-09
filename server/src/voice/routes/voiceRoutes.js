@@ -7,14 +7,25 @@ const router =
 const wrapAsync =
     require("../../utils/wrapAsync");
 
+const upload =
+    require("../services/uploadService");
+
 const {
     processVoice
 } = require(
     "../controllers/voiceController"
 );
 
+const {
+    isLoggedIn
+} = require(
+    "../../middleware/authMiddleware"
+);
+
 router.post(
-    "/intent",
+    "/checkin",
+    isLoggedIn,
+    upload.single("audio"),
     wrapAsync(
         processVoice
     )
