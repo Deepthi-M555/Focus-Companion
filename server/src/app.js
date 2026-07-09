@@ -12,7 +12,7 @@ const settingsRoutes = require("./routes/settingsRoutes");
 const userRoutes = require("./routes/userRoutes");
 
 const aiRoutes = require("./ai/routes/aiRoutes");
-const aiVoiceRoutes = require("./ai/routes/voiceRoutes");
+
 const focusVoiceRoutes = require("./voice/routes/voiceRoutes");
 const { isLoggedIn } = require("./middleware/authMiddleware");
 const errorMiddleware = require("./middleware/errorMiddleware");
@@ -39,7 +39,7 @@ app.use("/api/settings", settingsRoutes);
 app.use("/api/users", userRoutes);
 
 app.use("/api/ai",aiRoutes);
-app.use("/api/ai/voice", aiVoiceRoutes);
+
 app.use("/api/voice", focusVoiceRoutes);
 
 app.get("/", (req, res) => {
