@@ -1,63 +1,21 @@
-function detectIntent(transcript) {
+const {
+    classifyIntent
+} = require(
+    "../ai/providers/openRouterProvider"
+);
 
-    const text =
-        transcript.toLowerCase();
+async function detectIntent(
+    transcript
+) {
 
-    if (
-        text.includes("pause")
-    ) {
-        return {
-            intent:
-                "PAUSE_SESSION"
-        };
-    }
+    return await classifyIntent(
+        transcript
+    );
 
-    if (
-        text.includes("resume")
-    ) {
-        return {
-            intent:
-                "RESUME_SESSION"
-        };
-    }
-
-    if (
-        text.includes("complete")
-    ) {
-        return {
-            intent:
-                "COMPLETE_SESSION"
-        };
-    }
-
-    if (
-        text.includes("snooze")
-    ) {
-
-        const match =
-            text.match(
-                /(\d+)\s*minute/
-            );
-
-        return {
-            intent:
-                "SNOOZE_SESSION",
-
-            duration:
-                match
-                    ? Number(match[1])
-                    : 5
-        };
-    }
-
-    return {
-
-        intent:
-            "AI_COMPANION"
-
-    };
 }
 
 module.exports = {
+
     detectIntent
+
 };
