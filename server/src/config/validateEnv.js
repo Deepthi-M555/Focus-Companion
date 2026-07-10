@@ -1,11 +1,9 @@
-const requiredEnvVars = [
-
-  "MONGO_URI",
-
-  "JWT_SECRET",
-
-  "GEMINI_API_KEY"
-
+const requiredEnvVars=[
+"MONGO_URI",
+"JWT_SECRET",
+"OPENROUTER_API_KEY",
+"OPENROUTER_MODEL",
+"VOICE_SERVICE_URL"
 ];
 
 const validateEnv = () => {
