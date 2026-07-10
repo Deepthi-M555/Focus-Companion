@@ -5,3 +5,8 @@ client/package-lock.json
 
 .env
 dist/
+
+.venv/
+__pycache__/
+*.pyc
+voice-service/venv/
