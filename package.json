@@ -1,7 +1,6 @@
 {
   "name": "companion",
   "version": "1.0.0",
-  
   "description": "A full-stack desktop productivity application designed to help users stay focused, manage tasks, and improve productivity through structured scheduling and focus sessions.",
   "main": "electron/main.js",
   "scripts": {
