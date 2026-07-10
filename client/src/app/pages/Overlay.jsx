@@ -1,12 +1,153 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Play, Pause, Maximize2, X } from "lucide-react";
 import { motion } from "motion/react";
 import {requestMicrophonePermission} from "../services/microphoneService";
+import socket from "../services/socketService";
+import {VOICE_CONFIG} from "../config/voiceConfig";
+import voiceSessionService from "../services/voiceSessionService";
+
+import VoiceRecorder from "../services/voiceRecorder";
+import {uploadVoice} from "../services/voiceUploadService";
+import ttsService from "../services/ttsService";
+import { VoiceStates } from "../constants/voiceStates";
 
 // This simulates the always-on-top frameless Electron window
 export function Overlay() {
   const [isPaused, setIsPaused] = useState(false);
   const [timeLeft, setTimeLeft] = useState(45 * 60);
+
+  const[
+  voiceState,
+  setVoiceState
+  ]=useState(VoiceStates.IDLE);
+
+  const[
+  transcript,
+  setTranscript
+  ]=useState("");
+
+  const recorder=
+  useRef(new VoiceRecorder());
+
+  useEffect(()=>{
+
+    (async()=>{
+
+    const allowed=
+    await requestMicrophonePermission();
+
+    if(!allowed){
+
+    return;
+
+    }
+
+    setVoiceState(
+    VoiceStates.SPEAKING
+    );
+
+    await ttsService.speak(
+
+    VOICE_CONFIG.CHECK_IN_MESSAGE
+
+    );
+
+    setVoiceState(
+    VoiceStates.LISTENING
+    );
+
+    await recorder.current.start();
+
+    setTimeout(async()=>{
+
+    const blob=
+    await recorder.current.stop();
+
+    setVoiceState(
+    VoiceStates.PROCESSING
+    );
+
+    try{
+    const result=
+    await uploadVoice(blob);
+    setTranscript(
+        result.transcript
+        );
+        
+        socket.emit(
+    "voice-response",
+    {
+    sessionId :voiceSessionService.getSession(),
+    transcript: result.transcript
+    }
+    );
+    }catch(error){
+    setVoiceState(
+    VoiceStates.ERROR
+    );
+    }
+    setTimeout(()=>{
+
+    setVoiceState(
+    VoiceStates.CLOSING
+    );
+
+    },VOICE_CONFIG.CLOSING_DELAY_MS);
+
+    },VOICE_CONFIG.RECORDING_DURATION_MS);
+
+    })();
+
+  },[]);
+
+  useEffect(()=>{
+
+  socket.on(
+  "focus:continue",
+  ()=>{
+  setVoiceState(
+  VoiceStates.CLOSING
+  );
+  }
+  );
+
+  socket.on(
+  "focus:complete",
+  ()=>{
+  setVoiceState(
+  VoiceStates.COMPLETED
+  );
+  }
+  );
+
+  socket.on(
+  "focus:snooze",
+  ()=>{
+  setVoiceState(
+  VoiceStates.SNOOZED
+  );
+  }
+  );
+
+  socket.on(
+  "focus:recovery",
+  ()=>{
+  setVoiceState(
+  VoiceStates.RECOVERY
+  );
+  }
+  );
+
+  return()=>{
+
+  socket.off("focus:continue");
+  socket.off("focus:complete");
+  socket.off("focus:snooze");
+  socket.off("focus:recovery");
+
+  };
+
+  },[]);
 
   useEffect(() => {
     // Add a class to body to make it look like a transparent widget
@@ -59,8 +200,23 @@ export function Overlay() {
 
         {/* Task Info */}
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-neutral-500 uppercase tracking-wider font-semibold mb-0.5">Deep Work</p>
-          <p className="text-sm font-medium truncate text-neutral-900 dark:text-neutral-100">Review Algorithms</p>
+        <p className="text-xs text-neutral-500 uppercase tracking-wider font-semibold mb-0.5">
+        Deep Work
+        </p>
+
+        <p className="text-sm font-medium truncate text-neutral-900 dark:text-neutral-100">
+        Review Algorithms
+        </p>
+
+        <p className="text-xs text-blue-500 mt-1">
+        {voiceState}
+        </p>
+
+        {transcript&&(
+        <p className="text-xs text-neutral-500 truncate">
+        {transcript}
+        </p>
+        )}
         </div>
 
         {/* Controls */}
