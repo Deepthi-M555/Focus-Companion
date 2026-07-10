@@ -19,6 +19,7 @@ import socket, {
     connectSocket,
     disconnectSocket
 } from "../services/socketService";
+import voiceSessionService from "../services/voiceSessionService";
 
 export function FocusMode() {
   const navigate = useNavigate();
@@ -108,6 +109,7 @@ export function FocusMode() {
     if (!sessionId) return;
     try {
       await failSession(sessionId);
+      voiceSessionService.clear();
       toast.success("Focus session ended.");
       navigate("/recovery");
     } catch (error) {
@@ -278,12 +280,12 @@ export function FocusMode() {
 
     socket.on(
 
-        "session-completed",
+        "focus:complete",
 
         ()=>{
 
             setShowCheckIn(false);
-
+            voiceSessionService.clear();
             navigate("/dashboard");
 
         }
@@ -292,7 +294,7 @@ export function FocusMode() {
 
     socket.on(
 
-        "session-snoozed",
+        "focus:snooze",
 
         ()=>{
 
@@ -304,12 +306,12 @@ export function FocusMode() {
 
     socket.on(
 
-        "go-recovery",
+        "focus:recovery",
 
         ()=>{
 
             setShowCheckIn(false);
-
+            voiceSessionService.clear();
             navigate("/recovery");
 
         }
@@ -318,7 +320,7 @@ export function FocusMode() {
 
     socket.on(
 
-        "listen-again",
+        "focus:continue",
 
         ()=>{
 
@@ -336,13 +338,13 @@ export function FocusMode() {
 
         socket.off("show-check-in");
 
-        socket.off("session-completed");
+        socket.off("focus:complete");
 
-        socket.off("session-snoozed");
+        socket.off("focus:snooze");
 
-        socket.off("go-recovery");
+        socket.off("focus:recovery");
 
-        socket.off("listen-again");
+        socket.off("focus:continue");
 
     };
 
