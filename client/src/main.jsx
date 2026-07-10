@@ -1,5 +1,15 @@
-import { createRoot } from "react-dom/client";
+import {createRoot} from "react-dom/client";
 import App from "./app/App.jsx";
 import "./styles/index.css";
 
-createRoot(document.getElementById("root")).render(<App />);
+import{
+connectSocket
+}from"./app/services/socketService";
+
+connectSocket();
+
+createRoot(
+document.getElementById("root")
+).render(
+<App/>
+);

@@ -1,39 +1,50 @@
 import axios from "axios";
+import {VOICE_CONFIG} from "../config/voiceConfig";
 
-export async function uploadVoice(blob) {
+export async function uploadVoice(blob){
 
-    const formData = new FormData();
+const formData=new FormData();
 
-    formData.append(
+formData.append(
+"audio",
+blob,
+"voice.webm"
+);
 
-        "audio",
+try{
 
-        blob,
+const response=await axios.post(
 
-        "voice.webm"
+"/api/voice/checkin",
 
-    );
+formData,
 
-    const response = await axios.post(
+{
 
-        "/api/voice/check-in",
+headers:{
+"Content-Type":"multipart/form-data"
+},
 
-        formData,
+timeout:VOICE_CONFIG.API_TIMEOUT_MS
 
-        {
+}
 
-            headers: {
+);
 
-                "Content-Type":
+return response.data;
 
-                    "multipart/form-data"
+}catch(error){
 
-            }
+throw new Error(
 
-        }
+error.response?.data?.message||
 
-    );
+error.message||
 
-    return response.data;
+"Voice upload failed."
+
+);
+
+}
 
 }
