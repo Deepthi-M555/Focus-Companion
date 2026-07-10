@@ -19,6 +19,7 @@ import {
   failSession
 } from "../services/sessionService";
 import { toast } from "sonner";
+import voiceSessionService from "../services/voiceSessionService";
 
 export function Timetable() {
   const navigate = useNavigate();
@@ -56,11 +57,16 @@ export function Timetable() {
     }
 
     try {
-      await startSession({
+      const response = await startSession({
         taskId: task._id,
         duration: task.estimatedDuration,
         mode: "gentle"
       });
+
+      voiceSessionService.setSession(
+        response.session._id
+      );
+
       navigate("/focus");
     } catch (error) {
       if (error.response?.status === 409) {
