@@ -14,7 +14,7 @@ import { VoiceStates } from "../constants/voiceStates";
 // This simulates the always-on-top frameless Electron window
 export function Overlay() {
   const [isPaused, setIsPaused] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(45 * 60);
+  const [timeLeft,setTimeLeft]=useState(0);
 
   const[
   voiceState,
@@ -29,124 +29,149 @@ export function Overlay() {
   const recorder=
   useRef(new VoiceRecorder());
 
-  useEffect(()=>{
+  const startVoiceCheckIn=async(data)=>{
 
-    (async()=>{
+  try{
 
-    const allowed=
-    await requestMicrophonePermission();
+  const allowed=
+  await requestMicrophonePermission();
 
-    if(!allowed){
+  if(!allowed){
 
-    return;
+  setVoiceState(
+  VoiceStates.ERROR
+  );
 
-    }
+  return;
 
-    setVoiceState(
-    VoiceStates.SPEAKING
-    );
+  }
 
-    await ttsService.speak(
+  setTranscript("");
 
-    VOICE_CONFIG.CHECK_IN_MESSAGE
+  setVoiceState(
+  VoiceStates.SPEAKING
+  );
 
-    );
+  await ttsService.speak(
 
-    setVoiceState(
-    VoiceStates.LISTENING
-    );
+  data?.message||
+  VOICE_CONFIG.CHECK_IN_MESSAGE
 
-    await recorder.current.start();
+  );
 
-    setTimeout(async()=>{
+  setVoiceState(
+  VoiceStates.LISTENING
+  );
 
-    const blob=
-    await recorder.current.stop();
+  await recorder.current.start();
 
-    setVoiceState(
-    VoiceStates.PROCESSING
-    );
+  setTimeout(async()=>{
 
-    try{
-    const result=
-    await uploadVoice(blob);
-    setTranscript(
-        result.transcript
-        );
-        
-        socket.emit(
-    "voice-response",
-    {
-    sessionId :voiceSessionService.getSession(),
-    transcript: result.transcript
-    }
-    );
-    }catch(error){
-    setVoiceState(
-    VoiceStates.ERROR
-    );
-    }
-    setTimeout(()=>{
+  const blob=
+  await recorder.current.stop();
 
-    setVoiceState(
-    VoiceStates.CLOSING
-    );
+  setVoiceState(
+  VoiceStates.PROCESSING
+  );
 
-    },VOICE_CONFIG.CLOSING_DELAY_MS);
+  try{
 
-    },VOICE_CONFIG.RECORDING_DURATION_MS);
+  const result=
+  await uploadVoice(blob);
 
-    })();
+  setTranscript(
+  result.transcript
+  );
 
-  },[]);
+  socket.emit(
+  "voice-response",
+  {
+  sessionId:voiceSessionService.getSession(),
+  transcript:result.transcript
+  }
+  );
 
-  useEffect(()=>{
+  setTimeout(()=>{
 
-  socket.on(
-  "focus:continue",
-  ()=>{
   setVoiceState(
   VoiceStates.CLOSING
   );
-  }
-  );
 
-  socket.on(
-  "focus:complete",
-  ()=>{
+  },VOICE_CONFIG.CLOSING_DELAY_MS);
+
+  }catch{
+
   setVoiceState(
-  VoiceStates.COMPLETED
-  );
-  }
+  VoiceStates.ERROR
   );
 
-  socket.on(
-  "focus:snooze",
-  ()=>{
+  }
+
+  },VOICE_CONFIG.RECORDING_DURATION_MS);
+
+  }catch{
+
   setVoiceState(
-  VoiceStates.SNOOZED
+  VoiceStates.ERROR
   );
+
   }
-  );
-
-  socket.on(
-  "focus:recovery",
-  ()=>{
-  setVoiceState(
-  VoiceStates.RECOVERY
-  );
-  }
-  );
-
-  return()=>{
-
-  socket.off("focus:continue");
-  socket.off("focus:complete");
-  socket.off("focus:snooze");
-  socket.off("focus:recovery");
 
   };
 
+  useEffect(()=>{
+    
+    socket.on(
+    "show-check-in",
+    (data)=>{
+    startVoiceCheckIn(data);
+    }
+    );
+    socket.on(
+    "focus:continue",
+    ()=>{
+    setVoiceState(
+    VoiceStates.CLOSING
+    );
+    }
+    );
+
+    socket.on(
+    "focus:complete",
+    ()=>{
+    setVoiceState(
+    VoiceStates.COMPLETED
+    );
+    }
+    );
+
+    socket.on(
+    "focus:snooze",
+    ()=>{
+    setVoiceState(
+    VoiceStates.SNOOZED
+    );
+    }
+    );
+
+    socket.on(
+    "focus:recovery",
+    ()=>{
+    setVoiceState(
+    VoiceStates.RECOVERY
+    );
+    }
+    );
+
+    return()=>{
+
+    socket.off("show-check-in");
+    socket.off("focus:continue");
+    socket.off("focus:complete");
+    socket.off("focus:snooze");
+    socket.off("focus:recovery");
+
+    };
   },[]);
 
   useEffect(() => {
@@ -175,8 +200,9 @@ export function Overlay() {
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
-  const progress = ((45 * 60 - timeLeft) / (45 * 60)) * 100;
-
+  const totalDuration=45*60;
+  const progress=((totalDuration-timeLeft)/totalDuration)*100;
+  
   return (
     <div className="h-screen w-screen flex items-center justify-center p-4 selection:bg-blue-500/30">
       <motion.div 
@@ -205,7 +231,7 @@ export function Overlay() {
         </p>
 
         <p className="text-sm font-medium truncate text-neutral-900 dark:text-neutral-100">
-        Review Algorithms
+        Active Focus Session
         </p>
 
         <p className="text-xs text-blue-500 mt-1">
