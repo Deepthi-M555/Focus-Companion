@@ -181,14 +181,13 @@ async (req,res)=>{
 
     });
 
+    const maxSnoozes = settings?.maxSnoozes ?? 3;
+
     session.snoozeCount += 1;
 
     if(
-
-        session.snoozeCount >=
-
-        settings.maxSnoozes
-
+        maxSnoozes !== -1 &&
+        session.snoozeCount >= maxSnoozes
     ){
 
         session.status = "recovery";
@@ -305,7 +304,7 @@ module.exports.resumeActiveSession =
 async (req,res)=>{
     const session =
         await FocusSession.findOne({
-            user:req.identity.userId,
+            user: req.identity.userId,
             status:{
                 $in:[
                     "active",

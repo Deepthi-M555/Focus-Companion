@@ -49,9 +49,11 @@ async (
                 session.user
 
         });
-
-    const interval = duration;
-
+    
+    const interval=
+        settings?.checkInInterval||
+        duration;
+ 
     const timer =
 
         setTimeout(
@@ -183,8 +185,7 @@ async (
                                     });
 
                                     io.to(sessionId).emit(
-                                        "go-recovery",
-                                        { sessionId }
+                                        "focus:recovery"
                                     );
                                 } catch (error) {
                                     console.error(error);

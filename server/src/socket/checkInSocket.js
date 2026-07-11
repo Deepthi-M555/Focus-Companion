@@ -62,17 +62,19 @@ module.exports = (io, socket) => {
 
                 });
 
-                const intent =
-                detectIntent(transcript);
+                const aiResult=
+                await detectIntent(transcript);
 
-                const result =
+                logVoiceEvent({
+                sessionId,
+                intent:aiResult.intent,
+                transcript
+                });
+                
+                const result=
                 executeIntent({
-
-                    intent,
-
-                    currentState:
-                        session.status
-
+                intent:aiResult.intent,
+                currentState:session.status
                 });
 
                 await SessionEvent.create({
@@ -85,9 +87,11 @@ module.exports = (io, socket) => {
 
                     metadata:{
 
-                        transcript,
+                    transcript,
 
-                        intent
+                    intent:aiResult.intent,
+
+                    confidence:aiResult.confidence
 
                     }
 
@@ -131,9 +135,7 @@ module.exports = (io, socket) => {
                         });
 
                         io.to(sessionId).emit(
-
-                            "session-completed"
-
+                        "focus:complete"
                         );
 
                         break;
@@ -184,8 +186,7 @@ module.exports = (io, socket) => {
 
                             io.to(sessionId).emit(
 
-                                "go-recovery",
-                                { sessionId }
+                                "focus:recovery"
 
                             );
 
@@ -212,18 +213,16 @@ module.exports = (io, socket) => {
                         });
 
                         startSessionTimer(
-
-                            io,
-
-                            sessionId,
-
-                            settings?.snoozeDuration ?? 10
-
+                        io,
+                        sessionId,
+                        aiResult.duration||
+                        settings?.snoozeDuration||
+                        10
                         );
 
                         io.to(sessionId).emit(
 
-                            "session-snoozed"
+                            "focus:snooze"
 
                         );
 
@@ -259,8 +258,7 @@ module.exports = (io, socket) => {
 
                         io.to(sessionId).emit(
 
-                            "go-recovery",
-                            { sessionId }
+                            "focus:recovery"
 
                         );
 
@@ -270,7 +268,7 @@ module.exports = (io, socket) => {
 
                         io.to(sessionId).emit(
 
-                            "listen-again"
+                            "focus:continue"
 
                         );
 
