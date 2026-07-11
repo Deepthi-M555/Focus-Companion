@@ -1,4 +1,4 @@
-const Setup = require("../models/Setup");
+const CompanionSettings=require("../models/CompanionSettings");
 const ExpressError = require("../utils/ExpressError");
 
 module.exports.saveSetup = async (req, res) => {
@@ -33,19 +33,19 @@ module.exports.saveSetup = async (req, res) => {
         );
     }
     const setup =
-        await Setup.findOneAndUpdate(
-
+        await CompanionSettings.findOneAndUpdate(
             {
-                user: req.identity.userId
+                userId: req.identity.userId
             },
-
             {
-                micEnabled,
-                notificationsEnabled,
-                overlayEnabled,
-                checkInFrequency,
-                snoozeDuration,
-                maxSnoozes
+            userId:req.identity.userId,
+            voiceEnabled:micEnabled,
+            notificationsEnabled,
+            overlayEnabled,
+            checkInInterval:checkInFrequency,
+            voiceResponseTimeout:60,
+            snoozeDuration,
+            maxSnoozes
             },
 
             {
@@ -68,8 +68,8 @@ module.exports.saveSetup = async (req, res) => {
 
 module.exports.getSetup = async (req, res) => {
 
-    const setup = await Setup.findOne({
-        user: req.identity.userId
+    const setup = await CompanionSettings.findOne({
+        userId: req.identity.userId
     });
 
     res.status(200).json({
