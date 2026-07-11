@@ -1,170 +1,79 @@
-const {
-    STATES,
-    transition
-} = require(
-    "./focusStateMachine"
-);
+const{classifyIntent}=require("../ai/providers/openRouterProvider");
+const{STATES,transition}=require("./focusStateMachine");
 
-function detectIntent(
-    transcript
-) {
+async function detectIntent(transcript){
+const result=await classifyIntent(transcript);
 
-    const text =
-        transcript.toLowerCase();
+if(!result){
+return{
+intent:"UNKNOWN",
+duration:0,
+confidence:0,
+reply:"",
+raw:null
+};
+}
 
-    const completeKeywords = [
+return{
+intent:String(result.intent||"UNKNOWN").trim().toUpperCase(),
+duration:result.duration??0,
+confidence:result.confidence??1,
+reply:result.reply??"",
+raw:result
+};
+}
 
-        "yes",
-        "done",
-        "completed",
-        "finished",
-        "finish",
-        "i did it"
+function executeIntent({intent,currentState}){
 
-    ];
+switch(intent){
 
-    const snoozeKeywords = [
+case"COMPLETE_SESSION":
+return{
+nextState:transition({
+currentState,
+nextState:STATES.COMPLETED
+}),
+action:"COMPLETE"
+};
 
-        "snooze",
-        "later",
-        "5 minutes",
-        "10 minutes"
+case"SNOOZE_SESSION":
+return{
+nextState:transition({
+currentState,
+nextState:STATES.SNOOZED
+}),
+action:"SNOOZE"
+};
 
-    ];
+case"NEED_HELP":
+return{
+nextState:transition({
+currentState,
+nextState:STATES.RECOVERY_ENGINE
+}),
+action:"RECOVERY"
+};
 
-    const helpKeywords = [
+case"CONTINUE":
+return{
+nextState:transition({
+currentState,
+nextState:STATES.ACTIVE
+}),
+action:"CONTINUE"
+};
 
-        "help",
-        "stuck",
-        "confused",
-        "can't focus"
-
-    ];
-
-    if (
-        completeKeywords.some(
-            keyword =>
-                text.includes(keyword)
-        )
-    ) {
-
-        return "COMPLETE_SESSION";
-
-    }
-
-    if (
-        snoozeKeywords.some(
-            keyword =>
-                text.includes(keyword)
-        )
-    ) {
-
-        return "SNOOZE_SESSION";
-
-    }
-
-    if (
-        helpKeywords.some(
-            keyword =>
-                text.includes(keyword)
-        )
-    ) {
-
-        return "NEED_HELP";
-
-    }
-
-    return "UNKNOWN";
+default:
+return{
+nextState:currentState,
+action:"NONE"
+};
 
 }
 
-function executeIntent({
-
-    intent,
-
-    currentState
-
-}) {
-
-    switch (intent) {
-
-        case "COMPLETE_SESSION":
-
-            return {
-
-                nextState:
-                    transition({
-
-                        currentState,
-
-                        nextState:
-                            STATES.COMPLETED
-
-                    }),
-
-                action:
-                    "COMPLETE"
-
-            };
-
-        case "SNOOZE_SESSION":
-
-            return {
-
-                nextState:
-                    transition({
-
-                        currentState,
-
-                        nextState:
-                            STATES.SNOOZED
-
-                    }),
-
-                action:
-                    "SNOOZE"
-
-            };
-
-        case "NEED_HELP":
-
-            return {
-
-                nextState:
-                    transition({
-
-                        currentState,
-
-                        nextState:
-                            STATES.RECOVERY_ENGINE
-
-                    }),
-
-                action:
-                    "RECOVERY"
-
-            };
-
-        default:
-
-            return {
-
-                nextState:
-                    currentState,
-
-                action:
-                    "NONE"
-
-            };
-
-    }
-
 }
 
-module.exports = {
-
-    detectIntent,
-
-    executeIntent
-
+module.exports={
+detectIntent,
+executeIntent
 };
