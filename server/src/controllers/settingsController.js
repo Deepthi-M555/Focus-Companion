@@ -1,7 +1,7 @@
 const bcrypt = require("bcrypt");
 
 const User = require("../models/User");
-const Setup = require("../models/Setup");
+const CompanionSettings = require("../models/CompanionSettings");
 
 const ExpressError = require("../utils/ExpressError");
 
@@ -11,8 +11,9 @@ module.exports.getSettings = async (req, res) => {
         req.identity.userId
     ).select("name email");
 
-    const setup = await Setup.findOne({
-        user: req.identity.userId
+    const setup=
+    await CompanionSettings.findOne({
+    userId:req.identity.userId
     });
 
     res.json({
@@ -21,9 +22,8 @@ module.exports.getSettings = async (req, res) => {
 
         email: user.email,
 
-        micEnabled:
-            setup?.micEnabled ?? true,
-
+        voiceEnabled:
+setup?.voiceEnabled ?? true,
         notificationsEnabled:
             setup?.notificationsEnabled ?? true,
 
@@ -137,7 +137,7 @@ async (req, res) => {
     }
 
     const setup =
-        await Setup.findOneAndUpdate(
+        await CompanionSettings.findOneAndUpdate(
 
             {
 
@@ -148,7 +148,7 @@ async (req, res) => {
 
             {
 
-                micEnabled,
+                voiceEnabled: micEnabled,
 
                 notificationsEnabled,
 
@@ -156,7 +156,7 @@ async (req, res) => {
 
                 startupEnabled,
 
-                checkInFrequency: normalizedCheckInFrequency,
+                checkInInterval: normalizedCheckInFrequency,
 
                 snoozeDuration: normalizedSnoozeDuration,
 
