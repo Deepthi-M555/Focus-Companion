@@ -73,12 +73,12 @@ export function Settings() {
   const [overlayEnabled, setOverlayEnabled] = useState(true);
   const [startupEnabled, setStartupEnabled] = useState(false);
 
-  const [checkInFrequency, setCheckInFrequency] = useState("45");
+  const [checkInFrequency, setCheckInFrequency] = useState("15");
   const [snoozeDuration, setSnoozeDuration] = useState("5");
   const [maxSnoozes, setMaxSnoozes] = useState("3");
   const [savingProfile, setSavingProfile] = useState(false);
 
-const [savingPreferences, setSavingPreferences] = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
 
   const syncPermissions = async () => {
     if (typeof window === "undefined") {
@@ -138,11 +138,11 @@ const [savingPreferences, setSavingPreferences] = useState(false);
         try {
             const data = await getSettings();
 
-            setMicEnabled(data.micEnabled?? true);
+            setMicEnabled(data.voiceEnabled?? true);
             setNotificationsEnabled(data.notificationsEnabled?? true);
             setOverlayEnabled(data.overlayEnabled?? true);
             setStartupEnabled(data.startupEnabled?? false);
-            setCheckInFrequency(String(data.checkInFrequency??"45"));
+            setCheckInFrequency(String(data.checkInInterval??"15"));
             setSnoozeDuration(String(data.snoozeDuration??"5"));
             setMaxSnoozes(
                 data.maxSnoozes === -1
@@ -341,10 +341,10 @@ const [savingPreferences, setSavingPreferences] = useState(false);
             <div className="space-y-2">
               <label className="text-sm font-medium">Default Check-In Frequency</label>
               <Select value={checkInFrequency} onChange={(e) => setCheckInFrequency(e.target.value)}>
-                <option value="25">Every 25 minutes</option>
+                <option value="15">Every 15 minutes</option>
+                <option value="30">Every 30 minutes</option>
                 <option value="45">Every 45 minutes</option>
-                <option value="60">Every 60 minutes</option>
-                <option value="90">Every 90 minutes</option>
+                <option value="custom">Custom</option>
               </Select>
             </div>
             
@@ -371,9 +371,10 @@ const [savingPreferences, setSavingPreferences] = useState(false);
                   }
               >
                 <option value="1">1 time</option>
+                <option value="2">2 times</option>
                 <option value="3">3 times</option>
+                <option value="4">4 times</option>
                 <option value="5">5 times</option>
-                <option value="unlimited">Unlimited</option>
               </Select>
             </div>
           </div>
@@ -477,13 +478,13 @@ const [savingPreferences, setSavingPreferences] = useState(false);
                     try {
                       setSavingPreferences(true);
                       const normalizedPayload = {
-                        micEnabled,
+                        voiceEnabled: micEnabled,
                         notificationsEnabled,
                         overlayEnabled,
                         startupEnabled,
-                        checkInFrequency: Number(checkInFrequency),
+                        checkInInterval: Number(checkInFrequency),
                         snoozeDuration: Number(snoozeDuration),
-                        maxSnoozes: maxSnoozes === "unlimited" ? -1 : Number(maxSnoozes)
+                        maxSnoozes: Number(maxSnoozes)
                       };
                         await updateSettings(normalizedPayload);
                         toast.success("Preferences updated.");
