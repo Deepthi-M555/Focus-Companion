@@ -102,7 +102,7 @@ export function Setup() {
             notificationsEnabled,
             overlayEnabled,
 
-            checkInInterval:
+            checkInFrequency:
                 frequency === "custom"
                     ? Number(customFrequency)
                     : Number(frequency),
