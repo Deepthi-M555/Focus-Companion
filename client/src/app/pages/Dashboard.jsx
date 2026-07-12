@@ -6,8 +6,9 @@ import { Button } from "../components/ui/Button.jsx";
 import { toast } from "sonner";
 
 import { chat } from "../services/dashboardService";
-import { loadTodaySchedule, saveSchedule } from "../services/taskService";
+import { loadTodaySchedule} from "../services/taskService";
 import { ProfileAvatar } from "../components/ProfileAvatar.jsx";
+import {resumeActiveSession,failSession} from "../services/sessionService";
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -60,9 +61,12 @@ export function Dashboard() {
   const [inputValue, setInputValue] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [showActiveSessionModal, setShowActiveSessionModal] = useState(false);
+  const [pendingPrompt, setPendingPrompt] = useState("");
+  const [activeSession, setActiveSession] = useState(null);
   const [todayTasks, setTodayTasks] = useState([]);
   const [messages, setMessages] = useState(() => {
-    const storedMessages = sessionStorage.getItem("dashboardMessages");
+  const storedMessages = sessionStorage.getItem("dashboardMessages");
 
     if (storedMessages) {
       try {
@@ -104,9 +108,8 @@ export function Dashboard() {
     }
   }, [location]);
 
-  const handleSend = async () => {
-    if (!inputValue.trim() || isSending) return;
-    const userMessage = inputValue;
+ const generateSchedule = async (userMessage) => {
+   if (!userMessage.trim() || isSending) return;
     setMessages(prev => [
         ...prev,
         {
@@ -119,9 +122,12 @@ export function Dashboard() {
     try {
         const response = await chat(userMessage);
         const generatedTasks = response.data?.tasks || [];
-
+        sessionStorage.removeItem("pendingSchedule");
         if (generatedTasks.length) {
-          await saveSchedule({ tasks: generatedTasks });
+            sessionStorage.setItem(
+                "pendingSchedule",
+                JSON.stringify(generatedTasks)
+            );
         }
 
         setMessages(prev => [
@@ -146,6 +152,52 @@ export function Dashboard() {
         ]);
     } finally {
         setIsSending(false);
+    }
+  };
+
+  const handleSend = async () => {
+    if (!inputValue.trim() || isSending) {
+        return;
+    }
+    try {
+        const active = await resumeActiveSession();
+        console.log(active);
+        if (active?.session) {
+        setActiveSession(active.session);
+        setPendingPrompt(inputValue);
+        setShowActiveSessionModal(true);
+        return;
+      }
+    }
+    catch {
+        // No active session
+        // Continue normally.
+    }
+    generateSchedule(
+        inputValue
+    );
+  };
+  const handleResumeSession = () => {
+    setShowActiveSessionModal(false);
+    navigate("/focus");
+  };
+  const handleCancelSession = () => {
+    setShowActiveSessionModal(false);
+    setPendingPrompt("");
+    setActiveSession(null);
+  }
+  const handleEndAndGenerate = async () => {
+    try {
+        await failSession(activeSession._id);
+        setActiveSession(null);
+        setPendingPrompt("");
+        setShowActiveSessionModal(false);
+        await generateSchedule(pendingPrompt);
+    }
+    catch (error) {
+        toast.error(
+            "Unable to end current session."
+        );
     }
   };
 
@@ -322,6 +374,45 @@ export function Dashboard() {
           </div>
         </div>
       </div>
+      {showActiveSessionModal && (
+      <div className="absolute inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="w-full max-w-md rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 p-6 shadow-2xl">
+              <h3 className="text-xl font-medium mb-2">
+                  Active Focus Session
+              </h3>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-6">
+                  You already have an active focus session.
+                  Finish it or resume it before creating another timetable.
+              </p>
+              <div className="space-y-3">
+
+                  <Button
+                      variant="primary"
+                      className="w-full"
+                      onClick={handleResumeSession}
+                  >
+                      Resume Session
+                  </Button>
+
+                  <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={handleEndAndGenerate}
+                  >
+                      End Session & Generate New Plan
+                  </Button>
+
+                  <Button
+                      variant="ghost"
+                      className="w-full"
+                      onClick={handleCancelSession}
+                  >
+                      Cancel
+                  </Button>
+              </div>
+          </div>
+      </div>
+    )}
     </div>
   );
 }
