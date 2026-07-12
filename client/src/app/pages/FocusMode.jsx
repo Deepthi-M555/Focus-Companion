@@ -76,6 +76,20 @@ export function FocusMode() {
                 sessionId
 
             );
+            console.log(
+    "Remaining Duration:",
+    response.session.remainingDuration
+);
+
+console.log(
+    "Started At:",
+    response.session.startedAt
+);
+
+console.log(
+    "Calculated:",
+    getSessionTimeLeftSeconds(response.session)
+);
             setTimeLeft(getSessionTimeLeftSeconds(response.session));
 
         }else{
@@ -109,9 +123,10 @@ export function FocusMode() {
     if (!sessionId) return;
     try {
       await failSession(sessionId);
-      voiceSessionService.clear();
       toast.success("Focus session ended.");
-      navigate("/recovery");
+// Wait for socket.
+// Don't navigate here.
+
     } catch (error) {
       toast.error("Unable to end the focus session.");
     }
@@ -162,6 +177,10 @@ export function FocusMode() {
     async function beginSession() {
       try {
         const response = await resumeSession();
+
+        console.log("===== RESUME SESSION =====");
+        console.log(response.session);
+
         const scheduleItems = await getScheduleItems();
         const taskProgress = syncTaskProgressFromSchedule(scheduleItems);
 
@@ -200,11 +219,6 @@ export function FocusMode() {
     beginSession();
   }, []);
 
-  useEffect(() => {
-    return () => {
-        disconnectSocket();
-    };
-  }, []);
 
   useEffect(() => {
     if (!sessionId) {
@@ -278,19 +292,17 @@ export function FocusMode() {
 
     );
 
-    socket.on(
+    socket.on("focus:complete", () => {
 
-        "focus:complete",
+    console.log("FOCUS COMPLETE EVENT RECEIVED");
 
-        ()=>{
+    setShowCheckIn(false);
 
-            setShowCheckIn(false);
-            voiceSessionService.clear();
-            navigate("/dashboard");
+    voiceSessionService.clearSession();
 
-        }
+    navigate("/dashboard");
 
-    );
+});
 
     socket.on(
 
@@ -311,7 +323,7 @@ export function FocusMode() {
         ()=>{
 
             setShowCheckIn(false);
-            voiceSessionService.clear();
+            voiceSessionService.clearSession();
             navigate("/recovery");
 
         }
