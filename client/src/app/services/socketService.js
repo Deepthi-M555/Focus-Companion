@@ -5,9 +5,15 @@ const socket = io("http://localhost:5000", {
 });
 
 export function connectSocket() {
+
+    if (socket.connected) {
+        return;
+    }
+
     socket.auth = {
         token: localStorage.getItem("token")
     };
+
     socket.connect();
 }
 

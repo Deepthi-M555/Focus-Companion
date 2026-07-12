@@ -46,6 +46,10 @@ export async function resumeSession() {
 
 }
 
+export async function resumeActiveSession() {
+    return resumeSession();
+}
+
 export async function pauseSession(sessionId, owner = "WEB"){
 
     const{
