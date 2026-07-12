@@ -39,12 +39,18 @@ async (req, res) => {
       "Task and duration required"
     );
   }
+  console.log("Logged in user:", req.identity.userId);
+
   const existingSession = await FocusSession.findOne({
     user: req.identity.userId,
-    status: { $in: ["active", "paused", "check_in_pending", "snoozed"] }
+    status: {
+      $in: ["active", "paused", "check_in_pending", "snoozed"]
+    }
   })
     .sort({ startedAt: -1 })
     .populate("task");
+
+  console.log("Existing session:", existingSession);
 
   if (existingSession) {
     return res.status(409).json({
@@ -68,6 +74,9 @@ async (req, res) => {
       status: "active",
       startedAt: new Date()
     });
+
+    console.log("SESSION CREATED");
+    console.log(session);
 
     await Task.findByIdAndUpdate(
       taskId,
@@ -148,11 +157,19 @@ async (req, res) => {
       }
   });
 
-  res.json({
-    message:
-      "Session ended",
-    session
-  });
+  const io = req.app.get("io");
+
+const room = io.sockets.adapter.rooms.get(session._id.toString());
+
+console.log("ROOM MEMBERS:", room);
+console.log("EMITTING focus:complete");
+
+io.to(session._id.toString()).emit("focus:complete");
+
+res.json({
+  message: "Session ended",
+  session
+});
 };
 
 

@@ -1,6 +1,7 @@
 const FocusSession = require("../models/FocusSession");
 const Task = require("../models/Task");
 const SessionEvent = require("../models/SessionEvent");
+const { logVoiceEvent } = require("../voice/services/logger");
 
 const {
     detectIntent,
