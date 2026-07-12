@@ -66,16 +66,6 @@ io.on(
     );
 
     /*
-      SESSION EVENTS
-    */
-    require(
-      "./socket/sessionSocket"
-    )(
-      io,
-      socket
-    );
-
-    /*
       HEARTBEAT EVENTS
     */
     require(
