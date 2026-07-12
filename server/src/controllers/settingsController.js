@@ -34,7 +34,7 @@ setup?.voiceEnabled ?? true,
             setup?.startupEnabled ?? false,
 
         checkInFrequency:
-            setup?.checkInFrequency ?? 30,
+            setup?.checkInInterval ?? 30,
 
         snoozeDuration:
             setup?.snoozeDuration ?? 5,
@@ -141,7 +141,7 @@ async (req, res) => {
 
             {
 
-                user:
+                userId:
                     req.identity.userId
 
             },
