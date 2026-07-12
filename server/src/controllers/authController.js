@@ -2,7 +2,7 @@ const User = require("../models/User");
 const bcrypt = require("bcrypt");
 const ExpressError = require("../utils/ExpressError");
 const jwt = require("jsonwebtoken");
-const Setup = require("../models/Setup");
+const CompanionSettings = require("../models/CompanionSettings");
 
 module.exports.signup = async (req, res, next) => {
   const { name, email, password } = req.body;
@@ -72,7 +72,7 @@ module.exports.login = async (req, res, next) => {
   );
 
   const setupCompleted = Boolean(
-    await Setup.exists({ user: user._id })
+    await CompanionSettings.exists({ userId: user._id })
   );
 
   res.status(200).json({
