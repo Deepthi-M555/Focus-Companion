@@ -16,7 +16,8 @@ import { getSchedule } from "../services/scheduleService";
 import { saveSchedule } from "../services/taskService";
 import {
   startSession,
-  failSession
+  failSession,
+  resumeActiveSession
 } from "../services/sessionService";
 import { toast } from "sonner";
 import voiceSessionService from "../services/voiceSessionService";
@@ -32,11 +33,30 @@ export function Timetable() {
 
   useEffect(() => {
     async function loadSchedule() {
+        const pending =
+            sessionStorage.getItem(
+                "pendingSchedule"
+            );
+        if (pending) {
+            setBlocks(
+                JSON.parse(
+                    pending
+                )
+            );
+            return;
+        }
         try {
-            const response = await getSchedule();
-            setBlocks(response.schedule || []);
-        } catch (error) {
-            toast.error("Unable to load your timetable.");
+            const response =
+                await getSchedule();
+
+            setBlocks(
+                response.schedule || []
+            );
+        }
+        catch {
+            toast.error(
+                "Unable to load your timetable."
+            );
         }
     }
 
@@ -57,6 +77,17 @@ export function Timetable() {
     }
 
     try {
+      const activeSessionResponse = await resumeActiveSession();
+
+      console.log("===== ACTIVE SESSION =====");
+      console.log(activeSessionResponse);
+
+      if (activeSessionResponse?.session) {
+        voiceSessionService.setSession(activeSessionResponse.session._id);
+        navigate("/focus");
+        return;
+      }
+
       const response = await startSession({
         taskId: task._id,
         duration: task.estimatedDuration,
@@ -84,6 +115,7 @@ export function Timetable() {
 
     try {
       const response = await saveSchedule({ tasks: blocks });
+      sessionStorage.removeItem("pendingSchedule");
       const savedTasks = response.tasks || [];
       const firstTask = getFirstStartableTask(savedTasks);
 
