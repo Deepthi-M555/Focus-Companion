@@ -29,20 +29,12 @@ new mongoose.Schema({
         default:
             true
     },
-    checkInInterval: {
-        type:
-            Number,
-        default:
-            15
-    },
-
     voiceResponseTimeout: {
         type:
             Number,
         default:
             60
     },
-
     snoozeDuration: {
         type:
             Number,
