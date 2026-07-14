@@ -12,8 +12,7 @@ import {saveSetup, getSetup}from "../services/setupService";
 export function Setup() {
   const navigate = useNavigate();
 
-  const [frequency, setFrequency] = useState("30");
-  const [customFrequency, setCustomFrequency] = useState("");
+  const [voiceResponseTimeout, setVoiceResponseTimeout] = useState("60");
 
   const [micEnabled, setMicEnabled] = useState(true);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -43,24 +42,9 @@ export function Setup() {
                 setup.overlayEnabled
             );
 
-            const predefined = ["15","30","45"];
-              if (
-                  predefined.includes(
-                      String(setup.checkInInterval)
-                  )
-              ){
-                  setFrequency(
-                      String(setup.checkInInterval)
-                  );
-              }else{
-
-                  setFrequency("custom");
-
-                  setCustomFrequency(
-                      String(setup.checkInInterval)
-                  );
-              }
-
+            setVoiceResponseTimeout(
+                String(setup.voiceResponseTimeout ?? 60)
+            );
             setSnoozeDuration(
                 String(
                     setup.snoozeDuration
@@ -89,23 +73,13 @@ export function Setup() {
 
   const handleFinish = async (e) => {
     e.preventDefault();
-    if (
-      frequency === "custom" &&
-      !customFrequency.trim()
-    ) {
-        alert("Please enter a custom check-in interval.");
-    return;
-    }
     try {
         await saveSetup({
             micEnabled,
             notificationsEnabled,
             overlayEnabled,
 
-            checkInFrequency:
-                frequency === "custom"
-                    ? Number(customFrequency)
-                    : Number(frequency),
+            voiceResponseTimeout: Number(voiceResponseTimeout),
 
             snoozeDuration: Number(snoozeDuration),
             maxSnoozes:
@@ -184,43 +158,29 @@ export function Setup() {
             </div>
           </section>
 
-          {/* Check-In Frequency */}
+          {/* End of Session Check-in */}
           <section className="space-y-4">
-            <h2 className="text-lg font-medium border-b border-neutral-100 dark:border-neutral-800 pb-2">Default Check-In Frequency</h2>
-              <RadioGroup value={frequency} onValueChange={setFrequency} className="grid grid-cols-2 gap-4">
-              <div className="flex items-center space-x-3 p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors">
-                <RadioGroupItem value="15" id="r1" />
-                <Label htmlFor="r1" className="cursor-pointer">Every 15 minutes</Label>
-              </div>
-              <div className="flex items-center space-x-3 p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors">
-                <RadioGroupItem value="30" id="r2" />
-                <Label htmlFor="r2" className="cursor-pointer">Every 30 minutes</Label>
-              </div>
-              <div className="flex items-center space-x-3 p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors">
-                <RadioGroupItem value="45" id="r3" />
-                <Label htmlFor="r3" className="cursor-pointer">Every 45 minutes</Label>
-              </div>
-              <div className="flex items-center space-x-3 p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors">
-                <RadioGroupItem value="custom" id="r4" />
-                <Label htmlFor="r4" className="cursor-pointer">Custom</Label>
-              </div>
-            </RadioGroup>
+            <h2 className="text-lg font-medium border-b border-neutral-100 dark:border-neutral-800 pb-2">
+              End of Session Check-in
+            </h2>
 
-            {frequency === "custom" && (
-            <div className="mt-4">
-              <Label>Custom Check-in Interval (minutes)</Label>
+            <div className="space-y-2">
+              <Label>Voice Response (after session ends)Timeout</Label>
 
-              <Input
-                type="number"
-                placeholder="Enter minutes"
-                value={customFrequency}
-                onChange={(e) => setCustomFrequency(e.target.value)}
-                className="mt-2"
-                min="1"
-              />
+              <Select
+                value={voiceResponseTimeout}
+                onValueChange={(e) => setVoiceResponseTimeout(e.target.value)}
+              >
+                <option value="30">30 Seconds</option>
+                <option value="45">45 Seconds</option>
+                <option value="60">60 Seconds</option>
+                <option value="90">90 Seconds</option>
+              </Select>
+
+              <p className="text-xs text-neutral-500">
+                FYNIX waits this long for your response after your focus session finishes.
+              </p>
             </div>
-          )}
-          
           </section>
 
           {/* Snooze Preferences */}
