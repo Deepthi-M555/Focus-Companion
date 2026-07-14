@@ -73,7 +73,7 @@ export function Settings() {
   const [overlayEnabled, setOverlayEnabled] = useState(true);
   const [startupEnabled, setStartupEnabled] = useState(false);
 
-  const [checkInFrequency, setCheckInFrequency] = useState("15");
+  const [voiceResponseTimeout, setVoiceResponseTimeout] = useState("60");
   const [snoozeDuration, setSnoozeDuration] = useState("5");
   const [maxSnoozes, setMaxSnoozes] = useState("3");
   const [savingProfile, setSavingProfile] = useState(false);
@@ -142,7 +142,7 @@ export function Settings() {
             setNotificationsEnabled(data.notificationsEnabled?? true);
             setOverlayEnabled(data.overlayEnabled?? true);
             setStartupEnabled(data.startupEnabled?? false);
-            setCheckInFrequency(String(data.checkInInterval??"15"));
+            setVoiceResponseTimeout(String(data.voiceResponseTimeout ?? "60"));
             setSnoozeDuration(String(data.snoozeDuration??"5"));
             setMaxSnoozes(
                 data.maxSnoozes === -1
@@ -339,12 +339,20 @@ export function Settings() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Default Check-In Frequency</label>
-              <Select value={checkInFrequency} onChange={(e) => setCheckInFrequency(e.target.value)}>
-                <option value="15">Every 15 minutes</option>
-                <option value="30">Every 30 minutes</option>
-                <option value="45">Every 45 minutes</option>
-                <option value="custom">Custom</option>
+              <label className="text-sm font-medium">
+                Voice Response Timeout (after session ends)
+              </label>
+
+              <Select
+                value={voiceResponseTimeout}
+                onChange={(e) =>
+                  setVoiceResponseTimeout(e.target.value)
+                }
+              >
+                <option value="30">30 Seconds</option>
+                <option value="45">45 Seconds</option>
+                <option value="60">60 Seconds</option>
+                <option value="90">90 Seconds</option>
               </Select>
             </div>
             
@@ -482,7 +490,7 @@ export function Settings() {
                         notificationsEnabled,
                         overlayEnabled,
                         startupEnabled,
-                        checkInInterval: Number(checkInFrequency),
+                        voiceResponseTimeout: Number(voiceResponseTimeout),
                         snoozeDuration: Number(snoozeDuration),
                         maxSnoozes: Number(maxSnoozes)
                       };
