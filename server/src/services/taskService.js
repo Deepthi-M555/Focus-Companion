@@ -1,31 +1,42 @@
 const Task = require("../models/Task");
 
 async function saveSchedule({
-
     userId,
-
     tasks
-
 }) {
 
+    if (!Array.isArray(tasks)) {
+        throw new Error(
+            "Tasks must be an array."
+        );
+    }
+
+    /*
+     * Replace only tasks that have not started.
+     *
+     * Historical completed/skipped tasks remain history.
+     * Active in_progress task is never deleted here.
+     */
     await Task.deleteMany({
-
         userId,
-
-        completed: false,
-
-        status: {
-            $ne: "in_progress"
-        }
-
+        status: "pending"
     });
 
+    /*
+     * A newly generated timetable should contain
+     * only new/startable schedule blocks.
+     */
     const documents = tasks
-    .filter(task => task.status !== "in_progress")
-    .map(
-
-        (task, index) => ({
-
+        .filter(task =>
+            task &&
+            task.title &&
+            Number(task.estimatedDuration) > 0 &&
+            (
+                !task.status ||
+                task.status === "pending"
+            )
+        )
+        .map((task, index) => ({
             userId,
 
             title: task.title,
@@ -34,7 +45,9 @@ async function saveSchedule({
                 task.description || "",
 
             estimatedDuration:
-                task.estimatedDuration,
+                Number(
+                    task.estimatedDuration
+                ),
 
             priority:
                 task.priority || 1,
@@ -48,11 +61,13 @@ async function saveSchedule({
             fixedEndTime:
                 task.fixedEndTime || null,
 
-            sequenceOrder: index + 1
+            sequenceOrder:
+                index + 1,
 
-        })
+            status: "pending",
 
-    );
+            completed: false
+        }));
 
     if (!documents.length) {
         return [];
@@ -61,35 +76,32 @@ async function saveSchedule({
     return Task.insertMany(
         documents
     );
-
 }
 
+
 async function loadTodaySchedule(
-
     userId
-
 ) {
 
     return Task.find({
-
         userId,
 
-        completed: false
+        completed: false,
 
+        status: {
+            $in: [
+                "pending",
+                "in_progress"
+            ]
+        }
     })
-
     .sort({
-
         sequenceOrder: 1
-
     });
-
 }
 
+
 module.exports = {
-
     saveSchedule,
-
     loadTodaySchedule
-
 };
