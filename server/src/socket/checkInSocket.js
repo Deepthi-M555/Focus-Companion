@@ -1,7 +1,15 @@
-const FocusSession = require("../models/FocusSession");
-const Task = require("../models/Task");
-const SessionEvent = require("../models/SessionEvent");
-const { logVoiceEvent } = require("../voice/services/logger");
+const FocusSession =
+    require("../models/FocusSession");
+
+const Task =
+    require("../models/Task");
+
+const SessionEvent =
+    require("../models/SessionEvent");
+
+const {
+    logVoiceEvent
+} = require("../voice/services/logger");
 
 const {
     detectIntent,
@@ -9,282 +17,290 @@ const {
 } = require("../services/intentService");
 
 const {
-    startSessionTimer,
     clearSessionTimer
 } = require("../services/sessionTimerService");
 
-const CompanionSettings =
-require("../models/CompanionSettings");
-
 const {
-    STATES,
-    transition
+    STATES
 } = require(
     "../services/focusStateMachine"
 );
 
 module.exports = (io, socket) => {
 
-    socket.on("join_focus_session", (sessionId) => {
+    socket.on(
+        "join_focus_session",
+        (sessionId) => {
 
-        socket.join(sessionId);
+            socket.join(sessionId);
 
-    });
+        }
+    );
 
     socket.on(
-
         "voice-response",
 
         async ({
-
             sessionId,
-
             transcript
-
         }) => {
 
-            try{
+            try {
 
                 const session =
-                await FocusSession.findById(sessionId);
+                    await FocusSession.findById(
+                        sessionId
+                    );
 
-                if(!session){
-
+                if (!session) {
                     return;
-
                 }
 
-                clearSessionTimer(sessionId);
+                /*
+                 * Voice responses are only valid
+                 * while a check-in is waiting.
+                 *
+                 * This prevents late/duplicate
+                 * responses from modifying the
+                 * session after snooze/recovery/
+                 * completion.
+                 */
+                if (
+                    session.status !==
+                    STATES.CHECK_IN_PENDING
+                ) {
 
-                const settings =
-                await CompanionSettings.findOne({
+                    console.log(
+                        "Ignoring voice response. Session is not awaiting check-in:",
+                        session.status
+                    );
 
-                    userId:session.user
+                    return;
+                }
 
-                });
+                if (
+                    !transcript ||
+                    !transcript.trim()
+                ) {
 
-                const aiResult=
-                await detectIntent(transcript);
+                    io.to(sessionId).emit(
+                        "focus:clarify",
+                        {
+                            message:
+                                "I couldn't hear a response clearly."
+                        }
+                    );
+
+                    return;
+                }
+
+                const aiResult =
+                    await detectIntent(
+                        transcript
+                    );
 
                 logVoiceEvent({
-                sessionId,
-                intent:aiResult.intent,
-                transcript
+                    sessionId,
+                    intent:
+                        aiResult.intent,
+                    transcript
                 });
-                
-                const result=
-                executeIntent({
-                intent:aiResult.intent,
-                currentState:session.status
-                });
+
+                const result =
+                    executeIntent({
+                        intent:
+                            aiResult.intent,
+
+                        currentState:
+                            session.status
+                    });
 
                 await SessionEvent.create({
 
-                    session:session._id,
+                    session:
+                        session._id,
 
-                    user:session.user,
+                    user:
+                        session.user,
 
-                    type:"CHECK_IN",
+                    type:
+                        "CHECK_IN",
 
-                    metadata:{
+                    metadata: {
 
-                    transcript,
+                        transcript,
 
-                    intent:aiResult.intent,
+                        intent:
+                            aiResult.intent,
 
-                    confidence:aiResult.confidence
-
+                        confidence:
+                            aiResult.confidence
                     }
 
                 });
 
-                switch(result.action){
+                switch (result.action) {
 
-                    case "COMPLETE":
+                    /*
+                     * USER CONFIRMED COMPLETION
+                     */
+                    case "COMPLETE": {
 
-                        session.status=
+                        clearSessionTimer(
+                            sessionId
+                        );
+
+                        session.status =
                             result.nextState;
 
-                        session.completedBy="USER";
+                        session.completedBy =
+                            "USER";
 
-                        session.endedAt=new Date();
+                        session.endedAt =
+                            new Date();
 
-                        const elapsedMinutes = session.startedAt
-                            ? Math.max(0, Math.floor((Date.now() - session.startedAt.getTime()) / 60000))
-                            : 0;
-
-                        session.actualDuration = elapsedMinutes;
+                        /*
+                         * plannedDuration is the
+                         * meaningful focus duration
+                         * here because the focus
+                         * timer already reached zero
+                         * before check-in.
+                         */
+                        session.actualDuration =
+                            session.plannedDuration;
 
                         await session.save();
 
                         await Task.findByIdAndUpdate(
                             session.task,
                             {
-                                status: "completed",
-                                completed: true
+                                status:
+                                    "completed",
+
+                                completed:
+                                    true
                             }
                         );
 
                         await SessionEvent.create({
 
-                            session:session._id,
+                            session:
+                                session._id,
 
-                            user:session.user,
+                            user:
+                                session.user,
 
-                            type:"SESSION_COMPLETE"
-
+                            type:
+                                "SESSION_COMPLETE"
                         });
 
                         io.to(sessionId).emit(
-                        "focus:complete"
+                            "focus:complete",
+                            {
+                                sessionId
+                            }
                         );
 
                         break;
+                    }
 
-                    case "SNOOZE":
 
-                        session.snoozeCount += 1;
+                    /*
+                     * USER EXPLICITLY NEEDS HELP
+                     */
+                    case "RECOVERY": {
 
-                        if(
-
-                            session.snoozeCount >=
-
-                            (settings?.maxSnoozes ?? 3)
-
-                        ){
-
-                            session.status =
-                                transition({
-                                    currentState:
-                                        session.status,
-                                    nextState:
-                                        STATES.RECOVERY_ENGINE
-                                });
-
-                            session.completedBy =
-                                "RECOVERY";
-
-                            if (session.distractionCount < 1) {
-                                session.distractionCount += 1;
-                            }
-
-                            await session.save();
-
-                            await SessionEvent.create({
-                                session:
-                                    session._id,
-                                user:
-                                    session.user,
-                                type:
-                                    "RECOVERY_TRIGGERED",
-                                metadata: {
-                                    reason:
-                                        "MAX_SNOOZE_REACHED",
-                                    snoozeCount:
-                                        session.snoozeCount
-                                }
-                            });
-
-                            io.to(sessionId).emit(
-
-                                "focus:recovery"
-
-                            );
-
-                            return;
-
-                        }
+                        clearSessionTimer(
+                            sessionId
+                        );
 
                         session.status =
                             result.nextState;
 
-                        await session.save();
-
-                        await SessionEvent.create({
-                            session:
-                                session._id,
-                            user:
-                                session.user,
-                            type:
-                                "SNOOZE",
-                            metadata: {
-                                snoozeCount:
-                                    session.snoozeCount
-                            }
-                        });
-
-                        startSessionTimer(
-                        io,
-                        sessionId,
-                        aiResult.duration||
-                        settings?.snoozeDuration||
-                        10
-                        );
-
-                        io.to(sessionId).emit(
-
-                            "focus:snooze"
-
-                        );
-
-                        break;
-
-                    case "RECOVERY":
-
-                        session.status=
-                            result.nextState;
-
-                        if (session.distractionCount < 1) {
+                        if (
+                            session.distractionCount < 1
+                        ) {
                             session.distractionCount += 1;
                         }
 
-                        session.completedBy="RECOVERY";
+                        session.completedBy =
+                            "RECOVERY";
 
-                        session.endedAt=new Date();
+                        session.endedAt =
+                            new Date();
 
                         await session.save();
 
                         await SessionEvent.create({
+
                             session:
                                 session._id,
+
                             user:
                                 session.user,
+
                             type:
                                 "RECOVERY_TRIGGERED",
+
                             metadata: {
                                 reason:
                                     "NEED_HELP"
                             }
+
                         });
 
                         io.to(sessionId).emit(
-
-                            "focus:recovery"
-
+                            "focus:recovery",
+                            {
+                                sessionId
+                            }
                         );
 
                         break;
+                    }
 
-                    default:
+
+                    /*
+                     * UNKNOWN / UNCLEAR RESPONSE
+                     *
+                     * IMPORTANT:
+                     * Do NOT clear response timer.
+                     *
+                     * Session remains:
+                     * CHECK_IN_PENDING
+                     *
+                     * If the user doesn't provide
+                     * a valid answer before timeout,
+                     * sessionTimerService performs
+                     * automatic snooze.
+                     */
+                    default: {
 
                         io.to(sessionId).emit(
+                            "focus:clarify",
+                            {
+                                sessionId,
 
-                            "focus:continue"
-
+                                message:
+                                    aiResult.reply ||
+                                    "Please tell me whether you completed the task or need help."
+                            }
                         );
 
+                        break;
+                    }
                 }
 
-            }
+            } catch (error) {
 
-            catch(error){
-
-                console.error(error);
+                console.error(
+                    "Voice response error:",
+                    error
+                );
 
             }
 
         }
-
     );
 
 };

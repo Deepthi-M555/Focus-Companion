@@ -53,13 +53,8 @@ const transitions = {
     ],
 
     snoozed: [
-
-        "active",
-
         "check_in_pending",
-
         "recovery"
-
     ],
 
     recovery: [

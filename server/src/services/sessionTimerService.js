@@ -1,275 +1,441 @@
 const FocusSession =
 require("../models/FocusSession");
 
-const CompanionSettings =
-require("../models/CompanionSettings");
-
 const SessionEvent =
 require("../models/SessionEvent");
 
 const {
     STATES,
     transition
-} = require(
-    "./focusStateMachine"
-);
+} = require("./focusStateMachine");
 
-const activeTimers =
-new Map();
+const activeTimers = new Map();
+
+
+const setTimer = (
+    sessionId,
+    timer
+) => {
+
+    clearSessionTimer(sessionId);
+
+    activeTimers.set(
+        sessionId,
+        timer
+    );
+};
+
 
 const startSessionTimer =
 async (
-
     io,
-
     sessionId,
-
     duration
-
 ) => {
 
     clearSessionTimer(sessionId);
 
     const session =
-        await FocusSession
-        .findById(sessionId)
-        .populate("user");
+        await FocusSession.findById(
+            sessionId
+        );
 
-    if(!session){
-
+    if (!session) {
         return;
-
     }
 
-    const settings =
-        await CompanionSettings
-        .findOne({
-
-            userId:
-                session.user
-
-        });
-    
-    const interval=
-        settings?.checkInInterval||
-        duration;
- 
     const timer =
-
         setTimeout(
+            async () => {
 
-            async()=>{
+                try {
 
-                try{
-
-                    const currentSession =
-                        await FocusSession.findById(
-                            sessionId
-                        );
-
-                    if (!currentSession) {
-                        activeTimers.delete(sessionId);
-                        return;
-                    }
-
-                    currentSession.status =
-                        transition({
-                            currentState:
-                                currentSession.status,
-                            nextState:
-                                STATES.CHECK_IN_PENDING
-                        });
-                    currentSession.remainingDuration = 0;
-
-                    await currentSession.save();
-
-                    await SessionEvent.create({
-
-                        session:
-                            session._id,
-
-                        user:
-                            session.user._id,
-
-                        type:
-                            "CHECK_IN_TRIGGERED"
-
-                    });
-
-                    io.to(sessionId).emit(
-
-                        "show-check-in",
-
-                        {
-
-                            sessionId,
-
-                            personality:
-
-                                settings?.personality ??
-
-                                "GENTLE",
-
-                            timeout:
-
-                                settings?.voiceResponseTimeout ??
-
-                                60,
-
-                            maxSnoozes:
-
-                                settings?.maxSnoozes ??
-
-                                3,
-
-                            snoozeDuration:
-
-                                settings?.snoozeDuration ??
-
-                                10
-
-                        }
-
-                    );
-
-                    const voiceResponseTimeout =
-                        settings?.voiceResponseTimeout ?? 60;
-
-                    const responseTimer =
-                        setTimeout(
-                            async () => {
-                                try {
-                                    const pendingSession =
-                                        await FocusSession.findById(
-                                            sessionId
-                                        );
-
-                                    if (
-                                        !pendingSession ||
-                                        pendingSession.status !==
-                                            STATES.CHECK_IN_PENDING
-                                    ) {
-                                        return;
-                                    }
-
-                                    pendingSession.status =
-                                        transition({
-                                            currentState:
-                                                pendingSession.status,
-                                            nextState:
-                                                STATES.RECOVERY_ENGINE
-                                        });
-
-                                    if (
-                                        pendingSession.distractionCount < 1
-                                    ) {
-                                        pendingSession.distractionCount += 1;
-                                    }
-
-                                    pendingSession.completedBy =
-                                        "RECOVERY";
-
-                                    await pendingSession.save();
-
-                                    await SessionEvent.create({
-                                        session:
-                                            pendingSession._id,
-                                        user:
-                                            pendingSession.user,
-                                        type:
-                                            "RECOVERY_TRIGGERED",
-                                        metadata: {
-                                            reason:
-                                                "VOICE_TIMEOUT"
-                                        }
-                                    });
-
-                                    io.to(sessionId).emit(
-                                        "focus:recovery"
-                                    );
-                                } catch (error) {
-                                    console.error(error);
-                                } finally {
-                                    activeTimers.delete(sessionId);
-                                }
-                            },
-                            voiceResponseTimeout * 1000
-                        );
-
-                    activeTimers.set(
-                        sessionId,
-                        responseTimer
-                    );
-
-                }
-
-                catch(error){
-
-                    console.error(
-
-                        error
-
-                    );
-
-                    activeTimers.delete(
+                    await triggerCheckIn(
+                        io,
                         sessionId
                     );
 
+                } catch (error) {
+
+                    console.error(
+                        "Session timer error:",
+                        error
+                    );
+
+                    clearSessionTimer(
+                        sessionId
+                    );
                 }
 
             },
 
-            interval *
-
-            60 *
-
-            1000
-
+            duration * 60 * 1000
         );
 
     activeTimers.set(
-
         sessionId,
-
         timer
-
     );
-
 };
 
-const clearSessionTimer =
-(sessionId)=>{
 
-    const timer=
+const triggerCheckIn =
+async (
+    io,
+    sessionId
+) => {
 
-    activeTimers.get(
+    clearSessionTimer(sessionId);
 
-        sessionId
-
-    );
-
-    if(timer){
-
-        clearTimeout(
-
-            timer
-
-        );
-
-        activeTimers.delete(
-
+    const session =
+        await FocusSession.findById(
             sessionId
-
         );
 
+    if (!session) {
+        return;
     }
 
+    if (
+        session.status !== STATES.ACTIVE &&
+        session.status !== STATES.SNOOZED
+    ) {
+        return;
+    }
+
+    session.status =
+        transition({
+            currentState:
+                session.status,
+            nextState:
+                STATES.CHECK_IN_PENDING
+        });
+
+    session.remainingDuration = 0;
+
+    await session.save();
+
+    await SessionEvent.create({
+
+        session:
+            session._id,
+
+        user:
+            session.user,
+
+        type:
+            "CHECK_IN_TRIGGERED",
+
+        metadata: {
+            snoozeCount:
+                session.snoozeCount
+        }
+
+    });
+
+    io.to(sessionId).emit(
+        "show-check-in",
+        {
+            sessionId,
+
+            timeout:
+                session.voiceResponseTimeout,
+
+            snoozeDuration:
+                session.snoozeDuration,
+
+            snoozeCount:
+                session.snoozeCount,
+
+            maxSnoozes:
+                session.maxSnoozes
+        }
+    );
+
+    startResponseTimer(
+        io,
+        sessionId
+    );
 };
 
-module.exports={
+
+const startResponseTimer =
+async (
+    io,
+    sessionId
+) => {
+
+    const session =
+        await FocusSession.findById(
+            sessionId
+        );
+
+    if (!session) {
+        return;
+    }
+
+    const timeout =
+        session.voiceResponseTimeout ?? 60;
+
+    const responseTimer =
+        setTimeout(
+            async () => {
+
+                try {
+
+                    await handleNoResponse(
+                        io,
+                        sessionId
+                    );
+
+                } catch (error) {
+
+                    console.error(
+                        "Check-in timeout error:",
+                        error
+                    );
+
+                    clearSessionTimer(
+                        sessionId
+                    );
+                }
+
+            },
+
+            timeout * 1000
+        );
+
+    setTimer(
+        sessionId,
+        responseTimer
+    );
+};
+
+
+const handleNoResponse =
+async (
+    io,
+    sessionId
+) => {
+
+    clearSessionTimer(sessionId);
+
+    const session =
+        await FocusSession.findById(
+            sessionId
+        );
+
+    if (!session) {
+        return;
+    }
+
+    if (
+        session.status !==
+        STATES.CHECK_IN_PENDING
+    ) {
+        return;
+    }
+
+    session.snoozeCount += 1;
+
+    /*
+     * Example maxSnoozes = 3:
+     *
+     * missed check-in #1 -> snooze
+     * missed check-in #2 -> snooze
+     * missed check-in #3 -> snooze
+     * missed check-in #4 -> recovery
+     */
+
+    if (
+        session.snoozeCount >
+        session.maxSnoozes
+    ) {
+
+        session.status =
+            transition({
+                currentState:
+                    session.status,
+                nextState:
+                    STATES.RECOVERY_ENGINE
+            });
+
+        session.completedBy =
+            "RECOVERY";
+
+        session.endedAt =
+            new Date();
+
+        await session.save();
+
+        await SessionEvent.create({
+
+            session:
+                session._id,
+
+            user:
+                session.user,
+
+            type:
+                "RECOVERY_TRIGGERED",
+
+            metadata: {
+                reason:
+                    "MAX_SNOOZE_REACHED",
+
+                snoozeCount:
+                    session.snoozeCount
+            }
+
+        });
+
+        io.to(sessionId).emit(
+            "focus:recovery",
+            {
+                sessionId
+            }
+        );
+
+        return;
+    }
+
+    session.status =
+        transition({
+            currentState:
+                session.status,
+            nextState:
+                STATES.SNOOZED
+        });
+
+    await session.save();
+
+    await SessionEvent.create({
+
+        session:
+            session._id,
+
+        user:
+            session.user,
+
+        type:
+            "SNOOZE",
+
+        metadata: {
+
+            automatic: true,
+
+            snoozeCount:
+                session.snoozeCount,
+
+            snoozeDuration:
+                session.snoozeDuration
+        }
+
+    });
+
+    io.to(sessionId).emit(
+        "focus:snoozed",
+        {
+            sessionId,
+
+            snoozeCount:
+                session.snoozeCount,
+
+            maxSnoozes:
+                session.maxSnoozes,
+
+            snoozeDuration:
+                session.snoozeDuration
+        }
+    );
+
+    startSnoozeTimer(
+        io,
+        sessionId
+    );
+};
+
+
+const startSnoozeTimer =
+async (
+    io,
+    sessionId
+) => {
+
+    const session =
+        await FocusSession.findById(
+            sessionId
+        );
+
+    if (!session) {
+        return;
+    }
+
+    const duration =
+        session.snoozeDuration ?? 5;
+
+    const snoozeTimer =
+        setTimeout(
+            async () => {
+
+                try {
+
+                    await triggerCheckIn(
+                        io,
+                        sessionId
+                    );
+
+                } catch (error) {
+
+                    console.error(
+                        "Snooze timer error:",
+                        error
+                    );
+
+                    clearSessionTimer(
+                        sessionId
+                    );
+                }
+
+            },
+
+            duration * 60 * 1000
+        );
+
+    setTimer(
+        sessionId,
+        snoozeTimer
+    );
+};
+
+
+const clearSessionTimer =
+(sessionId) => {
+
+    const timer =
+        activeTimers.get(
+            sessionId
+        );
+
+    if (timer) {
+
+        clearTimeout(timer);
+
+        activeTimers.delete(
+            sessionId
+        );
+    }
+};
+
+
+module.exports = {
 
     startSessionTimer,
 
-    clearSessionTimer
+    clearSessionTimer,
+
+    triggerCheckIn,
+
+    startSnoozeTimer
 
 };
