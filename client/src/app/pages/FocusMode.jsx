@@ -1,12 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Play, Pause, Square, Mic, Shield, ShieldAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button.jsx";
 import { toast } from "sonner";
-import {
-    getSchedule
-} from "../services/scheduleService";
+import {getSchedule} from "../services/scheduleService";
 
 import {
     failSession,
@@ -15,11 +13,24 @@ import {
     resumePausedSession
 } from "../services/sessionService";
 
-import socket, {
-    connectSocket,
-    disconnectSocket
-} from "../services/socketService";
+import socket, {connectSocket} from "../services/socketService";
 import voiceSessionService from "../services/voiceSessionService";
+
+import {
+  requestMicrophonePermission
+} from "../services/microphoneService";
+
+import VoiceRecorder from "../services/voiceRecorder";
+
+import {
+  uploadVoice
+} from "../services/voiceUploadService";
+
+import ttsService from "../services/ttsService";
+
+import {
+  VOICE_CONFIG
+} from "../config/voiceConfig";
 
 export function FocusMode() {
   const navigate = useNavigate();
@@ -31,10 +42,102 @@ export function FocusMode() {
   const [sessionId, setSessionId] = useState(null);
   const [checkInStatus, setCheckInStatus] = useState("listening");
   const [voiceTimeout, setVoiceTimeout] = useState(60);
-  const [personality, setPersonality] = useState("GENTLE");
   const [currentTaskIndex, setCurrentTaskIndex] = useState(1);
   const [totalTasks, setTotalTasks] = useState(1);
   const [currentTaskTitle, setCurrentTaskTitle] = useState("No active task");
+
+  const [transcript, setTranscript] = useState("");
+  const recorder = useRef(new VoiceRecorder());
+  const modeRef = useRef("gentle");
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+
+  const startVoiceCheckIn =
+  async (data) => {
+    try {
+      setTranscript("")
+      setCheckInStatus(
+        "speaking"
+      );
+      const allowed =
+        await requestMicrophonePermission();
+      if (!allowed) {
+        setCheckInStatus(
+          "error"
+        );
+        toast.error(
+          "Microphone permission is required for voice check-in."
+        );
+
+        return;
+      }
+      const message =
+  modeRef.current === "strict"
+    ? "Time's up. Tell me clearly. Did you finish the task or not?"
+    : "Your focus session is complete. Did you finish the task?";
+      await ttsService.speak(
+        message
+      );
+      setCheckInStatus(
+        "listening"
+      );
+
+      await recorder.current.start();
+      setTimeout(
+        async () => {
+          try {
+
+            const blob =
+              await recorder.current.stop();
+            setCheckInStatus(
+              "processing"
+            );
+            const result =
+              await uploadVoice(blob);
+            const spokenText =
+              result?.transcript?.trim();
+            if (!spokenText) {
+              setCheckInStatus(
+                "listening"
+              );
+              return;
+            }
+            setTranscript(
+              spokenText
+            );
+            socket.emit(
+              "voice-response",
+              {
+                sessionId:
+                  data?.sessionId ||
+                  sessionId,
+                transcript:
+                  spokenText
+              }
+            );
+          } catch (error) {
+            console.error(
+              "Voice processing failed:",
+              error
+            );
+            setCheckInStatus(
+              "error"
+            );
+          }
+        },
+        VOICE_CONFIG.RECORDING_DURATION_MS
+      );
+    } catch (error) {
+      console.error(
+        "Voice check-in failed:",
+        error
+      );
+      setCheckInStatus(
+        "error"
+      );
+    }
+  };
 
   // Formatting time
   const formatTime = (seconds) => {
@@ -152,25 +255,34 @@ console.log(
   };
 
   const getSessionTimeLeftSeconds = (session) => {
-    if (!session) return 0;
 
-    const baseMinutes = Number(
-      session.remainingDuration ?? session.plannedDuration ?? 0
-    );
-
-    if (session.status === "paused" || session.status === "check_in_pending") {
-      return Math.max(0, Math.round(baseMinutes * 60));
+    if (!session) {
+      return 0;
     }
 
-    if (session.startedAt && Number.isFinite(baseMinutes)) {
-      const elapsedSeconds = Math.max(
-        0,
-        Math.floor((Date.now() - new Date(session.startedAt).getTime()) / 1000)
+    if (
+      session.status === "check_in_pending" ||
+      session.status === "snoozed" ||
+      session.status === "recovery" ||
+      session.status === "skipped" ||
+      session.status === "completed"
+    ) {
+      return 0;
+    }
+
+    const remainingMinutes =
+      Number(
+        session.remainingDuration ??
+        session.plannedDuration ??
+        0
       );
-      return Math.max(0, Math.round(baseMinutes * 60 - elapsedSeconds));
-    }
 
-    return Math.max(0, Math.round(baseMinutes * 60));
+    return Math.max(
+      0,
+      Math.round(
+        remainingMinutes * 60
+      )
+    );
   };
 
   useEffect(() => {
@@ -199,6 +311,7 @@ console.log(
           setCurrentTaskTitle(activeTaskTitle);
           setSessionId(response.session._id);
           setIsPaused(response.session.status === "paused");
+          setMode(response.session.mode ?? "gentle");
 
           setPlannedDuration((response.session.plannedDuration ?? activeTask?.estimatedDuration ?? 0) * 60);
           setTimeLeft(getSessionTimeLeftSeconds(response.session));
@@ -265,101 +378,146 @@ console.log(
   },[sessionId]);
 
   useEffect(()=>{
+    const handleShowCheckIn =
+      async (data) => {
+
+        setShowCheckIn(true);
+
+        setVoiceTimeout(
+          data.timeout ?? 60
+        );
+
+        await startVoiceCheckIn(data);
+      };
 
     socket.on(
-
-        "show-check-in",
-
-        data=>{
-
-            setShowCheckIn(true);
-
-            setCheckInStatus("listening");
-
-            setVoiceTimeout(
-
-                data.timeout
-
-            );
-
-            setPersonality(
-
-                data.personality
-
-            );
-
-        }
-
+      "show-check-in",
+      handleShowCheckIn
     );
 
     socket.on("focus:complete", () => {
 
-    console.log("FOCUS COMPLETE EVENT RECEIVED");
+        console.log("FOCUS COMPLETE EVENT RECEIVED");
 
-    setShowCheckIn(false);
+        setShowCheckIn(false);
 
-    voiceSessionService.clearSession();
+        voiceSessionService.clearSession();
 
-    navigate("/dashboard");
+        navigate("/dashboard");
 
-});
-
+    });
     socket.on(
+      "focus:ended",
+      () => {
 
-        "focus:snooze",
+        console.log(
+          "FOCUS SESSION ENDED"
+        );
 
-        ()=>{
+        setShowCheckIn(false);
 
-            setShowCheckIn(false);
+        voiceSessionService.clearSession();
 
-        }
-
+        navigate("/dashboard");
+      }
     );
 
     socket.on(
-
-        "focus:recovery",
-
+        "focus:snoozed",
         ()=>{
+            setShowCheckIn(false);
+        }
+    );
 
+    socket.on(
+        "focus:recovery",
+        ()=>{
             setShowCheckIn(false);
             voiceSessionService.clearSession();
             navigate("/recovery");
-
         }
-
     );
 
     socket.on(
+      "focus:clarify",
+      async (data) => {
 
-        "focus:continue",
+        setCheckInStatus("clarify");
 
-        ()=>{
+        try {
 
-            setCheckInStatus(
+          await ttsService.speak(
+            data?.message ||
+            "Please tell me whether you completed the task or need help."
+          );
 
-                "listening"
+          setCheckInStatus("listening");
 
-            );
+          await recorder.current.start();
 
+          setTimeout(async () => {
+
+            try {
+
+              const blob =
+                await recorder.current.stop();
+
+              setCheckInStatus(
+                "processing"
+              );
+
+              const result =
+                await uploadVoice(blob);
+
+              const spokenText =
+                result?.transcript?.trim();
+
+              if (!spokenText) {
+                return;
+              }
+
+              setTranscript(spokenText);
+
+              socket.emit(
+                "voice-response",
+                {
+                  sessionId: data.sessionId,
+                  transcript: spokenText
+                }
+              );
+
+            } catch (error) {
+
+              console.error(
+                "Clarification recording failed:",
+                error
+              );
+
+              setCheckInStatus("error");
+            }
+
+          }, VOICE_CONFIG.RECORDING_DURATION_MS);
+
+        } catch (error) {
+
+          console.error(
+            "Clarification failed:",
+            error
+          );
+
+          setCheckInStatus("error");
         }
-
+      }
     );
 
     return()=>{
-
-        socket.off("show-check-in");
-
+        socket.off("show-check-in", handleShowCheckIn);
         socket.off("focus:complete");
-
-        socket.off("focus:snooze");
-
+        socket.off("focus:ended");
+        socket.off("focus:snoozed");
         socket.off("focus:recovery");
-
-        socket.off("focus:continue");
-
+        socket.off("focus:clarify");
     };
-
   },[]);
 
   const progress = plannedDuration > 0
@@ -381,7 +539,7 @@ console.log(
       <header className="p-6 relative z-10 flex justify-center">
         <div className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-md p-1 rounded-full border border-neutral-200 dark:border-neutral-800 flex items-center shadow-sm">
           <button
-            onClick={() => setMode("gentle")}
+            disabled
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
               mode === "gentle" 
                 ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 shadow-sm" 
@@ -394,7 +552,7 @@ console.log(
             </div>
           </button>
           <button
-            onClick={() => setMode("strict")}
+            disabled
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
               mode === "strict" 
                 ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 shadow-sm" 
@@ -523,13 +681,13 @@ console.log(
 
               <h2 className="text-2xl font-medium mb-2">Voice Check-In</h2>
               <p className="text-neutral-500 mb-2">
-                {personality === "STRICT"
-                  ? "Focus check. Respond now."
-                  : "Hey! Are you still studying?"}
+                {mode === "strict"
+                  ? "Time's up. Tell me clearly. Did you finish the task or not?"
+                  : "Your focus session is complete. Did you finish the task?"}
               </p>
 
               <p className="text-xs text-neutral-400">
-                Listening for {voiceTimeout} seconds...
+                Respond within {voiceTimeout} seconds
               </p>
 
               {checkInStatus === "listening" && (
@@ -545,8 +703,29 @@ console.log(
                 </div>
               )}
 
-              {checkInStatus === "listening" && (
-                <p className="text-sm text-neutral-400 italic mb-8">"Listening..."</p>
+              <p className="text-sm text-neutral-400 italic mb-8">
+
+                {checkInStatus === "speaking" &&
+                  "FYNIX is speaking..."}
+
+                {checkInStatus === "listening" &&
+                  "Listening..."}
+
+                {checkInStatus === "processing" &&
+                  "Understanding your response..."}
+
+                {checkInStatus === "clarify" &&
+                  "I didn't quite understand that..."}
+
+                {checkInStatus === "error" &&
+                  "Voice check-in unavailable."}
+
+              </p>
+
+              {transcript && (
+                <p className="text-sm text-neutral-500 mb-6">
+                  You said: "{transcript}"
+                </p>
               )}
 
               <div className="flex gap-3">
@@ -563,7 +742,7 @@ console.log(
 
                         sessionId,
 
-                        transcript:"yes"
+                        transcript: "I completed the task"
 
                       }
 
@@ -572,54 +751,24 @@ console.log(
                   }}
 
                 >
-                  Yes
+                  Completed
                 </Button>
-                <Button 
-                  className="flex-1" 
-                  variant="outline"
-                  onClick={async()=>{
-
-                    socket.emit(
-
-                      "voice-response",
-
-                      {
-
-                        sessionId,
-
-                        transcript:"snooze"
-
-                      }
-
-                    );
-
-                  }}
-                >
-                  Snooze
-                </Button>
+              
               </div>
 
               <button 
                 onClick={()=>{
-
                     socket.emit(
-
                       "voice-response",
-
                       {
-
                         sessionId,
-
-                        transcript:"help"
-
+                        transcript:"I need help"
                       }
-
                     );
-
                   }}
                 className="mt-6 text-sm text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 transition-colors"
               >
-                No, I missed it...
+              I need help
               </button>
             </motion.div>
           </motion.div>

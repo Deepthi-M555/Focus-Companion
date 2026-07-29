@@ -24,17 +24,6 @@ export async function failSession(sessionId, owner = "WEB") {
 
 }
 
-export async function snoozeSession(sessionId) {
-
-    const { data } =
-        await api.post(
-            `/sessions/snooze/${sessionId}`
-        );
-
-    return data;
-
-}
-
 export async function resumeSession() {
 
     const { data } =
