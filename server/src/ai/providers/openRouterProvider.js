@@ -71,34 +71,59 @@ model:process.env.OPENROUTER_MODEL,
 messages:[
 
 {
-role:"system",
-content:`
-You are an intent classifier.
+    role: "system",
+    content: `
+You are an intent classifier for an end-of-focus-session voice check-in.
 
 Return ONLY valid JSON.
+Do not include markdown, explanations, or extra text.
 
 Schema:
 
 {
-"intent":"CONTINUE|COMPLETE_SESSION|SNOOZE_SESSION|NEED_HELP",
-"duration":number
+    "intent": "COMPLETE_SESSION|NEED_HELP|UNKNOWN",
+    "duration": 0,
+    "confidence": number,
+    "reply": string
 }
 
-Rules:
-
-CONTINUE
-User is still working.
+Intent rules:
 
 COMPLETE_SESSION
-User finished.
-
-SNOOZE_SESSION
-User asks for more time.
+The user clearly indicates that the task or focus work is finished.
+Examples:
+"I finished it"
+"I'm done"
+"Yes, completed"
+"I completed the task"
 
 NEED_HELP
-User is stuck or needs assistance.
+The user indicates that the task is unfinished, they are stuck,
+they need help, or they could not complete the work.
+Examples:
+"I couldn't finish"
+"I need more time"
+"I'm stuck"
+"I need help"
+"I couldn't complete it"
 
-duration should be 0 unless snooze.
+UNKNOWN
+The response is unclear, unrelated, ambiguous, or does not clearly
+indicate completion or needing help.
+Examples:
+"maybe"
+"what?"
+"hello"
+"I don't know"
+
+Important rules:
+
+- Never return CONTINUE.
+- Never return SNOOZE_SESSION.
+- Snoozing is controlled automatically by the backend timer and is NOT a voice intent.
+- duration must always be 0.
+- confidence must be a number between 0 and 1.
+- reply should contain a short clarification message only when intent is UNKNOWN.
 `
 },
 
