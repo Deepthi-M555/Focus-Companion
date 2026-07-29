@@ -4,9 +4,7 @@ import { Mic, Bell, Monitor, Settings } from "lucide-react";
 import { Button } from "../components/ui/Button.jsx";
 import { Label } from "../components/ui/Label.jsx";
 import { Switch } from "../components/ui/Switch.jsx";
-import { RadioGroup, RadioGroupItem } from "../components/ui/RadioGroup.jsx";
 import { Select } from "../components/ui/Select.jsx";
-import { Input } from "../components/ui/Input.jsx";
 
 import {saveSetup, getSetup}from "../services/setupService";
 export function Setup() {
@@ -52,13 +50,7 @@ export function Setup() {
             );
 
             setMaxSnoozes(
-                setup.maxSnoozes === -1
-
-                    ? "unlimited"
-
-                    : String(
-                        setup.maxSnoozes
-                    )
+                String(setup.maxSnoozes ?? 3)
             );
         }
         catch (error) {
@@ -82,10 +74,7 @@ export function Setup() {
             voiceResponseTimeout: Number(voiceResponseTimeout),
 
             snoozeDuration: Number(snoozeDuration),
-            maxSnoozes:
-                maxSnoozes === "unlimited"
-                    ? -1
-                    : Number(maxSnoozes)
+            maxSnoozes: Number(maxSnoozes)
         });
         navigate("/dashboard");
     }
@@ -137,7 +126,7 @@ export function Setup() {
                   </div>
                   <div>
                     <Label className="text-base font-medium">Notifications</Label>
-                    <p className="text-sm text-neutral-500 dark:text-neutral-400">Get gentle nudges for focus blocks and breaks.</p>
+                    <p className="text-sm text-neutral-500 dark:text-neutral-400">Receive notifications for focus completion and recovery.</p>
                   </div>
                 </div>
                 <Switch checked={notificationsEnabled} onCheckedChange={setNotificationsEnabled} />
@@ -165,7 +154,7 @@ export function Setup() {
             </h2>
 
             <div className="space-y-2">
-              <Label>Voice Response (after session ends)Timeout</Label>
+              <Label>Voice Response Timeout</Label>
 
               <Select
                 value={voiceResponseTimeout}
@@ -190,6 +179,7 @@ export function Setup() {
               <div className="space-y-2">
                 <Label>Snooze Duration</Label>
                 <Select value={snoozeDuration} onValueChange={(e) => setSnoozeDuration(e.target.value)}>
+                  <option value="2">2 minutes</option>
                   <option value="5">5 minutes</option>
                   <option value="10">10 minutes</option>
                   <option value="15">15 minutes</option>

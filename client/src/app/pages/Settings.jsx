@@ -145,11 +145,9 @@ export function Settings() {
             setVoiceResponseTimeout(String(data.voiceResponseTimeout ?? "60"));
             setSnoozeDuration(String(data.snoozeDuration??"5"));
             setMaxSnoozes(
-                data.maxSnoozes === -1
-                    ? "unlimited"
-                    : String(data.maxSnoozes ?? "3")
+                String(data.maxSnoozes ?? 3)
             );
-
+    
         } catch (error) {
             toast.error("Unable to load settings.");
         }
@@ -367,6 +365,7 @@ export function Settings() {
                 <option value="2">2 minutes</option>
                 <option value="5">5 minutes</option>
                 <option value="10">10 minutes</option>
+                <option value="15">15 minutes</option>
               </Select>
             </div>
 

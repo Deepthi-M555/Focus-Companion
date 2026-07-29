@@ -20,10 +20,11 @@ module.exports.getSettings = async (req, res) => {
 
         name: user?.name || "",
 
-        email: user.email,
+        email: user?.email || "",
 
         voiceEnabled:
-setup?.voiceEnabled ?? true,
+            setup?.voiceEnabled ?? true,
+
         notificationsEnabled:
             setup?.notificationsEnabled ?? true,
 
@@ -33,15 +34,14 @@ setup?.voiceEnabled ?? true,
         startupEnabled:
             setup?.startupEnabled ?? false,
 
-        checkInFrequency:
-            setup?.checkInInterval ?? 30,
+        voiceResponseTimeout:
+            setup?.voiceResponseTimeout ?? 60,
 
         snoozeDuration:
             setup?.snoozeDuration ?? 5,
 
         maxSnoozes:
             setup?.maxSnoozes ?? 3
-
     });
 
 };
@@ -94,61 +94,55 @@ module.exports.updatePreferences =
 async (req, res) => {
 
     const {
-
-        micEnabled,
-
+        voiceEnabled,
         notificationsEnabled,
-
         overlayEnabled,
-
         startupEnabled,
-
-        checkInFrequency,
-
+        voiceResponseTimeout,
         snoozeDuration,
-
         maxSnoozes
-
     } = req.body;
 
-    const normalizedCheckInFrequency = Number(checkInFrequency);
-    const normalizedSnoozeDuration = Number(snoozeDuration);
-    const normalizedMaxSnoozes = maxSnoozes === -1 ? -1 : Number(maxSnoozes);
+
+    const normalizedVoiceResponseTimeout =
+        Number(voiceResponseTimeout);
+
+    const normalizedSnoozeDuration =
+        Number(snoozeDuration);
+
+    const normalizedMaxSnoozes =
+        Number(maxSnoozes);
+
 
     if (
+        !Number.isFinite(normalizedVoiceResponseTimeout) ||
+        normalizedVoiceResponseTimeout <= 0 ||
 
-        !Number.isFinite(normalizedCheckInFrequency) ||
-        normalizedCheckInFrequency <= 0 ||
         !Number.isFinite(normalizedSnoozeDuration) ||
         normalizedSnoozeDuration <= 0 ||
-        !Number.isFinite(normalizedMaxSnoozes) ||
-        normalizedMaxSnoozes < -1
 
+        !Number.isFinite(normalizedMaxSnoozes) ||
+        normalizedMaxSnoozes < 1 ||
+        normalizedMaxSnoozes > 5
     ) {
 
         throw new ExpressError(
-
             400,
-
             "Invalid preference values."
-
         );
-
     }
+
 
     const setup =
         await CompanionSettings.findOneAndUpdate(
 
             {
-
                 userId:
                     req.identity.userId
-
             },
 
             {
-
-                voiceEnabled: micEnabled,
+                voiceEnabled,
 
                 notificationsEnabled,
 
@@ -156,25 +150,23 @@ async (req, res) => {
 
                 startupEnabled,
 
-                checkInInterval: normalizedCheckInFrequency,
+                voiceResponseTimeout:
+                    normalizedVoiceResponseTimeout,
 
-                snoozeDuration: normalizedSnoozeDuration,
+                snoozeDuration:
+                    normalizedSnoozeDuration,
 
-                maxSnoozes: normalizedMaxSnoozes
-
+                maxSnoozes:
+                    normalizedMaxSnoozes
             },
 
             {
-
                 upsert: true,
-
                 new: true,
-
                 runValidators: true
-
             }
-
         );
+
 
     res.json({
 
@@ -182,9 +174,7 @@ async (req, res) => {
             "Preferences updated successfully.",
 
         setup
-
     });
-
 };
 
 module.exports.changePassword =

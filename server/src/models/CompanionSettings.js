@@ -30,22 +30,19 @@ new mongoose.Schema({
             true
     },
     voiceResponseTimeout: {
-        type:
-            Number,
-        default:
-            60
+        type: Number,
+        default: 60,
+        min: 1
     },
     snoozeDuration: {
-        type:
-            Number,
-        default:
-            10
+        type: Number,
+        default: 5
     },
     maxSnoozes: {
-        type:
-            Number,
-        default:
-            3
+        type: Number,
+        default: 3,
+        min: 1,
+        max: 5
     },
     overlayEnabled:{
     type:Boolean,
