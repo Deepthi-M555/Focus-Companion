@@ -26,6 +26,7 @@ export function Timetable() {
   const navigate = useNavigate();
 
   const [blocks, setBlocks] = useState([]);
+  const [hasPendingSchedule, setHasPendingSchedule] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [activeConflict, setActiveConflict] = useState(null);
   const [pendingStartTask, setPendingStartTask] = useState(null);
@@ -33,38 +34,63 @@ export function Timetable() {
 
   useEffect(() => {
     async function loadSchedule() {
-        const pending =
-            sessionStorage.getItem(
-                "pendingSchedule"
-            );
-        if (pending) {
-            setBlocks(
-                JSON.parse(
-                    pending
-                )
-            );
-            return;
-        }
-        try {
-            const response =
-                await getSchedule();
+      const pending =
+        sessionStorage.getItem("pendingSchedule");
 
-            setBlocks(
-                response.schedule || []
-            );
+      if (pending) {
+        try {
+          const parsed = JSON.parse(pending);
+
+          setBlocks(
+            Array.isArray(parsed) ? parsed : []
+          );
+
+          setHasPendingSchedule(true);
+        } catch (error) {
+          console.error(
+            "Invalid pending schedule:",
+            error
+          );
+
+          sessionStorage.removeItem(
+            "pendingSchedule"
+          );
         }
-        catch {
-            toast.error(
-                "Unable to load your timetable."
-            );
-        }
+
+        return;
+      }
+
+      try {
+        const response =
+          await getSchedule();
+
+        setBlocks(
+          Array.isArray(response.schedule)
+            ? response.schedule
+            : []
+        );
+
+        setHasPendingSchedule(false);
+
+      } catch (error) {
+        console.error(
+          "Unable to load timetable:",
+          error
+        );
+
+        toast.error(
+          "Unable to load your timetable."
+        );
+      }
     }
 
     loadSchedule();
-}, []);
+  }, []);
 
   const getFirstStartableTask = (tasks = []) => {
-    return tasks.find(task => task.status === "pending") || tasks[0] || null;
+    return tasks.find(
+      task => task.status === "pending"
+    ) || null;
   };
 
   const startFocusForTask = async (task) => {
@@ -111,27 +137,110 @@ export function Timetable() {
   };
 
   const handleSaveAndStart = async () => {
+    if (!blocks.length) {
+      toast.error(
+        "Add a task before starting focus mode."
+      );
+      return;
+    }
+
     setIsSaving(true);
 
     try {
-      const response = await saveSchedule({ tasks: blocks });
-      sessionStorage.removeItem("pendingSchedule");
-      const savedTasks = response.tasks || [];
-      const firstTask = getFirstStartableTask(savedTasks);
 
-      if (!firstTask) {
-        toast.error("Add a task before starting focus mode.");
+      /*
+      * CASE 1:
+      * Newly generated timetable.
+      * It does not exist in MongoDB yet.
+      */
+      if (hasPendingSchedule) {
+
+        const response =
+          await saveSchedule({
+            tasks: blocks
+          });
+
+        const savedTasks =
+          response.tasks ||
+          response.schedule ||
+          [];
+
+        console.log(
+          "===== SAVED TASKS =====",
+          savedTasks
+        );
+
+        if (!savedTasks.length) {
+          throw new Error(
+            "Timetable was not saved correctly."
+          );
+        }
+
+        setBlocks(savedTasks);
+
+        sessionStorage.removeItem(
+          "pendingSchedule"
+        );
+
+        setHasPendingSchedule(false);
+
+        const firstTask =
+          getFirstStartableTask(
+            savedTasks
+          );
+
+        if (!firstTask) {
+          throw new Error(
+            "No pending task is available to start."
+          );
+        }
+
+        toast.success(
+          "Timetable saved."
+        );
+
+        await startFocusForTask(
+          firstTask
+        );
+
         return;
       }
 
-      toast.success("Timetable saved.");
-      await startFocusForTask(firstTask);
+      /*
+      * CASE 2:
+      * Timetable already came from MongoDB.
+      * DO NOT save/recreate it again.
+      */
+      const firstTask =
+        getFirstStartableTask(
+          blocks
+        );
+
+      if (!firstTask) {
+        toast.error(
+          "No pending task is available to start."
+        );
+        return;
+      }
+
+      await startFocusForTask(
+        firstTask
+      );
+
     } catch (error) {
+
+      console.error(
+        "Start focus failed:",
+        error
+      );
+
       toast.error(
         error?.response?.data?.error?.message ||
+        error?.response?.data?.message ||
         error.message ||
         "Unable to start focus mode."
       );
+
     } finally {
       setIsSaving(false);
     }

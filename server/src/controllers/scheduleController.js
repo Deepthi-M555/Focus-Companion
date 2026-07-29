@@ -11,10 +11,17 @@ async (req, res) => {
 
   const tasks =
     await Task.find({
-
       userId:
-        req.identity.userId
+        req.identity.userId,
 
+      completed: false,
+
+      status: {
+        $in: [
+          "pending",
+          "in_progress"
+        ]
+      }
     });
 
   if (!tasks.length) {
