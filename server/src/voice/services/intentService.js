@@ -7,7 +7,6 @@ const {
 async function detectIntent(
     transcript
 ) {
-
     return await classifyIntent(
         transcript
     );

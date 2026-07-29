@@ -6,24 +6,16 @@ const room=io.to(sessionId);
 
 switch(action){
 
-case"CONTINUE":
-room.emit("focus:continue");
-break;
+    case"COMPLETE":
+    room.emit("focus:complete");
+    break;
 
-case"COMPLETE":
-room.emit("focus:complete");
-break;
+    case"RECOVERY":
+    room.emit("focus:recovery");
+    break;
 
-case"SNOOZE":
-room.emit("focus:snooze");
-break;
-
-case"RECOVERY":
-room.emit("focus:recovery");
-break;
-
-default:
-break;
+    default:
+    break;
 
 }
 

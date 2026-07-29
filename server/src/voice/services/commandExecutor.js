@@ -39,17 +39,6 @@ async function executeCommand({
 
             break;
 
-        case "SNOOZE_SESSION":
-
-            socket.emit(
-                "snooze-session",
-                {
-                    sessionId,
-                    duration
-                }
-            );
-
-            break;
     }
 }
 
