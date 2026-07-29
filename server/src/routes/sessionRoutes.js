@@ -16,14 +16,11 @@ const {
 const {
     startSession,
     failSession,
-    snoozeSession,
     resumeActiveSession,
     pauseSession,
     resumePausedSession,
     skipSession
-} = require(
-    "../controllers/sessionController"
-);
+} = require("../controllers/sessionController");
 
 router.post(
   "/start",
@@ -35,12 +32,6 @@ router.post(
   "/fail/:id",
   isLoggedIn,
   wrapAsync(failSession)
-);
-
-router.post(
-  "/snooze/:id",
-  isLoggedIn,
-  wrapAsync(snoozeSession)
 );
 
 router.get(
@@ -97,8 +88,13 @@ explicit behavioral actions.
 
 Example:
 
+Example:
+
+startSession()
+pauseSession()
+resumePausedSession()
+skipSession()
 failSession()
-snoozeSession()
 
 This makes:
 

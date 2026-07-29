@@ -11,6 +11,10 @@ const SessionEvent =
 require("../models/SessionEvent");
 
 const {
+  STATES
+} = require("../services/focusStateMachine");
+
+const {
     startSessionTimer,
     clearSessionTimer
 } = require(
@@ -63,17 +67,39 @@ async (req, res) => {
     });
   }
 
-  const session =
-    await FocusSession.create({
-      user: req.identity.userId,
-      task: taskId,
-      plannedDuration: duration,
-      remainingDuration: duration,
-      mode,
-      owner,
-      status: "active",
-      startedAt: new Date()
+  const settings =
+    await CompanionSettings.findOne({
+      userId: req.identity.userId
     });
+    const session =
+      await FocusSession.create({
+        user: req.identity.userId,
+        task: taskId,
+
+        plannedDuration:
+          task.estimatedDuration,
+
+        remainingDuration:
+          task.estimatedDuration,
+
+        mode,
+        owner,
+
+        status: STATES.ACTIVE,
+        startedAt: new Date(),
+
+        // Snapshot focus preferences
+        voiceResponseTimeout:
+          settings?.voiceResponseTimeout ?? 60,
+
+        snoozeDuration:
+          settings?.snoozeDuration ?? 5,
+
+        maxSnoozes:
+          settings?.maxSnoozes ?? 3,
+
+        snoozeCount: 0
+      });
 
     console.log("SESSION CREATED");
     console.log(session);
@@ -110,12 +136,16 @@ startSessionTimer(
 
 module.exports.failSession =
 async (req, res) => {
-    const owner = req.body.owner || "WEB";
-    const session =
-      await FocusSession.findOne({
-          _id: req.params.id,
-          user: req.identity.userId
-      });
+
+  const owner =
+    req.body.owner || "WEB";
+
+  const session =
+    await FocusSession.findOne({
+      _id: req.params.id,
+      user: req.identity.userId
+    });
+
   if (!session) {
     throw new ExpressError(
       404,
@@ -123,173 +153,67 @@ async (req, res) => {
     );
   }
 
-  if (session.owner === "DESKTOP" && owner !== "DESKTOP") {
+  if (
+    session.owner === "DESKTOP" &&
+    owner !== "DESKTOP"
+  ) {
     throw new ExpressError(
       409,
       "Session is controlled by the desktop client"
     );
   }
 
-  session.status = "recovery";
-  session.completedBy = "SYSTEM";
-  session.endedAt =
-    new Date();
+  /*
+   * Manual End Session is a terminal action.
+   * It must NOT remain resumable.
+   */
+  session.status = "skipped";
+  session.completedBy = "USER";
+  session.endedAt = new Date();
+
   await session.save();
 
   await Task.findByIdAndUpdate(
-      session.task,
-      {
-          status: "skipped"
-      }
+    session.task,
+    {
+      status: "skipped",
+      completed: false
+    }
   );
 
   clearSessionTimer(
-      session._id.toString()
+    session._id.toString()
   );
 
   await SessionEvent.create({
-      session: session._id,
-      user: session.user,
-      type: "RECOVERY_TRIGGERED",
-      metadata: {
-        reason: "SESSION_ENDED_BY_USER",
-        endedAt: new Date()
-      }
+    session: session._id,
+    user: session.user,
+    type: "SESSION_SKIPPED",
+    metadata: {
+      reason: "SESSION_ENDED_BY_USER",
+      endedAt: new Date()
+    }
   });
 
-  const io = req.app.get("io");
+  const io =
+    req.app.get("io");
 
-const room = io.sockets.adapter.rooms.get(session._id.toString());
-
-console.log("ROOM MEMBERS:", room);
-console.log("EMITTING focus:complete");
-
-io.to(session._id.toString()).emit("focus:complete");
-
-res.json({
-  message: "Session ended",
-  session
-});
-};
-
-
-module.exports.snoozeSession =
-async (req,res)=>{
-
-    const session =
-    await FocusSession.findById(
-        req.params.id
-    );
-
-    if(!session){
-
-        throw new ExpressError(
-            404,
-            "Session not found"
-        );
-
-    }
-
-    const settings =
-    await CompanionSettings.findOne({
-
-        userId:
-        session.user
-
-    });
-
-    const maxSnoozes = settings?.maxSnoozes ?? 3;
-
-    session.snoozeCount += 1;
-
-    if(
-        maxSnoozes !== -1 &&
-        session.snoozeCount >= maxSnoozes
-    ){
-
-        session.status = "recovery";
-
-        session.completedBy = "RECOVERY";
-
-        session.endedAt = new Date();
-
-        await session.save();
-
-        clearSessionTimer(
-
-            session._id.toString()
-
-        );
-
-        await SessionEvent.create({
-
-            session:
-            session._id,
-
-            user:
-            session.user,
-
-            type:
-            "RECOVERY_TRIGGERED",
-
-            metadata:{
-
-                reason:
-                "MAX_SNOOZE_REACHED"
-
-            }
-
-        });
-
-        return res.json({
-
-            action:"RECOVERY",
-
-            session
-
-        });
-
-    }
-
-    session.status="snoozed";
-
-    await session.save();
-
-    clearSessionTimer(
-
+  io.to(
+    session._id.toString()
+  ).emit(
+    "focus:ended",
+    {
+      sessionId:
         session._id.toString()
+    }
+  );
 
-    );
-
-    await SessionEvent.create({
-
-        session:
-        session._id,
-
-        user:
-        session.user,
-
-        type:
-        "SNOOZE",
-
-        metadata:{
-
-            snoozeCount:
-            session.snoozeCount
-
-        }
-
-    });
-
-    res.json({
-
-        action:"SNOOZE",
-
-        session
-
-    });
-
+  res.json({
+    message: "Session ended",
+    session
+  });
 };
+
 
 const computeRemainingDuration = (session) => {
   if (!session) return null;
@@ -302,7 +226,11 @@ const computeRemainingDuration = (session) => {
     return baseDuration;
   }
 
-  if (session.status === "check_in_pending") {
+  if (
+    session.status === "check_in_pending" ||
+    session.status === "snoozed" ||
+    session.status === "recovery"
+  ) {
     return 0;
   }
 

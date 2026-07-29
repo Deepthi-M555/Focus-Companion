@@ -93,13 +93,32 @@ new mongoose.Schema({
   },
 
   distractionCount: {
-    type: Number,
-    default: 0
+      type: Number,
+      default: 0
   },
 
   snoozeCount: {
-    type: Number,
-    default: 0
+      type: Number,
+      default: 0
+  },
+
+  voiceResponseTimeout: {
+      type: Number,
+      default: 60,
+      min: 1
+  },
+
+  snoozeDuration: {
+      type: Number,
+      default: 5,
+      min: 1
+  },
+
+  maxSnoozes: {
+      type: Number,
+      default: 3,
+      min: 1,
+      max:5
   },
 
   notes: {
