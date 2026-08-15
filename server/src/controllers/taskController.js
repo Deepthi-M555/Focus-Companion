@@ -1,6 +1,9 @@
 const Task =
 require("../models/Task");
 
+const FocusSession =
+require("../models/FocusSession");
+
 const ExpressError =
 require("../utils/ExpressError");
 
@@ -43,71 +46,66 @@ async (req, res) => {
 
 };
 
-const {
-
-    saveSchedule,
-
-    loadTodaySchedule
-
-} = require(
-
-    "../services/taskService"
-
-);
+const{
+saveSchedule,
+loadTodaySchedule,
+}=require("../services/taskService");
 
 module.exports.saveSchedule =
 async (
-
     req,
-
     res
-
 ) => {
+    const activeSession =
+        await FocusSession.findOne({
+            user:
+                req.identity.userId,
+
+            status: {
+                $in: [
+                    "active",
+                    "paused",
+                    "check_in_pending",
+                    "snoozed",
+                    "recovery"
+                ]
+            }
+        }).populate("task");
+
+    if (activeSession) {
+        throw new ExpressError(
+            409,
+            "Finish or 
+            the current focus session before replacing the timetable."
+        );
+    }
 
     const savedTasks =
         await saveSchedule({
-
             userId:
                 req.identity.userId,
-
             tasks:
                 req.body.tasks
-
         });
-
     res.json({
-
         message:
             "Timetable saved.",
-
         tasks:
             savedTasks
-
     });
-
 };
 
 module.exports.loadSchedule =
 async (
-
     req,
-
     res
-
 ) => {
-
-    const tasks =
-        await loadTodaySchedule(
-
-            req.identity.userId
-
-        );
-
+    const tasks=
+    await loadTodaySchedule(
+    req.identity.userId
+    );
     res.json({
-
         schedule:
             tasks
-
     });
-
 };

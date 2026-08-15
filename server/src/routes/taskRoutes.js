@@ -5,7 +5,7 @@ const router = express.Router();
 const {
   createTask,
   saveSchedule,
-  loadSchedule
+  loadSchedule,
 } = require("../controllers/taskController");
 
 const {

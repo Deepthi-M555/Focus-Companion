@@ -1,38 +1,27 @@
-const Task =
-require("../models/Task");
+const {
+    loadActiveSchedule
+} = require("../services/taskService");
 
 const {
-  generateSchedule
-} =
-require("../services/schedulingService");
+    generateSchedule
+} = require("../services/schedulingService");
 
-module.exports.generate =
-async (req, res) => {
+module.exports.generate = async (req, res) => {
 
-  const tasks =
-    await Task.find({
-      userId:
-        req.identity.userId,
+    const tasks = await loadActiveSchedule(
+        req.identity.userId
+    );
 
-      completed: false,
+    if (!tasks.length) {
+        return res.json({
+            schedule: []
+        });
+    }
 
-      status: {
-        $in: [
-          "pending",
-          "in_progress"
-        ]
-      }
+    const schedule = generateSchedule(tasks);
+
+    res.json({
+        schedule
     });
-
-  if (!tasks.length) {
-    return res.json({
-      schedule: []
-    });
-  }
-
-  const schedule =
-    generateSchedule(tasks);
-
-  res.json({ schedule });
 
 };
