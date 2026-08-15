@@ -7,10 +7,6 @@ deleteRecording
 }=require("../services/recorderService");
 
 const{
-detectIntent
-}=require("../../services/intentService");
-
-const{
 checkVoiceService
 }=require(
 "../services/voiceHealthService"
@@ -49,26 +45,14 @@ try{
     audioPath
     );
 
-    const intent=
-    await detectIntent(
-    transcriptResult.text
-    );
-
     return res.json({
-
-    success:true,
-
-    transcript:
-    transcriptResult.text,
-
-    language:
-    transcriptResult.language,
-
-    confidence:
-    transcriptResult.language_probability,
-
-    intent
-
+        success: true,
+        transcript:
+            transcriptResult.text,
+        language:
+            transcriptResult.language,
+        confidence:
+            transcriptResult.language_probability
     });
 
 }

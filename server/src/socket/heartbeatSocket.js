@@ -54,6 +54,12 @@ module.exports = (
 
             try {
 
+                const session = await FocusSession.findById(sessionId);
+
+                if (!session || String(session.user) !== String(socket.user.userId)) {
+                    return;
+                }
+
                 await FocusSession.findByIdAndUpdate(
 
                     sessionId,

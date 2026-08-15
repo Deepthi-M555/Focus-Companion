@@ -1,9 +1,6 @@
 const FocusSession =
     require("../models/FocusSession");
 
-const Task =
-    require("../models/Task");
-
 const SessionEvent =
     require("../models/SessionEvent");
 
@@ -26,13 +23,29 @@ const {
     "../services/focusStateMachine"
 );
 
+const {
+    completeSessionAndAdvance
+} = require(
+    "../services/sessionCompletionService"
+);
+
 module.exports = (io, socket) => {
 
     socket.on(
         "join_focus_session",
-        (sessionId) => {
+        async (sessionId) => {
 
-            socket.join(sessionId);
+            try {
+                const session = await FocusSession.findById(sessionId);
+
+                if (!session || String(session.user) !== String(socket.user.userId)) {
+                    return;
+                }
+
+                socket.join(sessionId);
+            } catch (error) {
+                console.error("Unable to join focus session:", error);
+            }
 
         }
     );
@@ -46,13 +59,9 @@ module.exports = (io, socket) => {
         }) => {
 
             try {
+                const session = await FocusSession.findById(sessionId);
 
-                const session =
-                    await FocusSession.findById(
-                        sessionId
-                    );
-
-                if (!session) {
+                if (!session || String(session.user) !== String(socket.user.userId)) {
                     return;
                 }
 
@@ -75,6 +84,27 @@ module.exports = (io, socket) => {
                         session.status
                     );
 
+                    await SessionEvent.create({
+
+                        session:
+                            session._id,
+
+                        user:
+                            session.user,
+
+                        type:
+                            "VOICE_RESPONSE_REJECTED",
+
+                        metadata: {
+                            reason:
+                                "SESSION_NOT_WAITING_FOR_CHECK_IN",
+
+                            sessionStatus:
+                                session.status
+                        }
+
+                    });
+
                     return;
                 }
 
@@ -83,9 +113,29 @@ module.exports = (io, socket) => {
                     !transcript.trim()
                 ) {
 
+                    await SessionEvent.create({
+
+                        session:
+                            session._id,
+
+                        user:
+                            session.user,
+
+                        type:
+                            "CHECK_IN_CLARIFY",
+
+                        metadata: {
+                            reason:
+                                "EMPTY_TRANSCRIPT"
+                        }
+
+                    });
+
                     io.to(sessionId).emit(
                         "focus:clarify",
                         {
+                            sessionId,
+
                             message:
                                 "I couldn't hear a response clearly."
                         }
@@ -127,14 +177,14 @@ module.exports = (io, socket) => {
                         "CHECK_IN",
 
                     metadata: {
-
                         transcript,
-
                         intent:
                             aiResult.intent,
-
                         confidence:
-                            aiResult.confidence
+                            aiResult.confidence,
+                        source:
+                            aiResult.raw?.source ||
+                            "ai"
                     }
 
                 });
@@ -146,60 +196,17 @@ module.exports = (io, socket) => {
                      */
                     case "COMPLETE": {
 
-                        clearSessionTimer(
-                            sessionId
-                        );
-
-                        session.status =
-                            result.nextState;
-
-                        session.completedBy =
-                            "USER";
-
-                        session.endedAt =
-                            new Date();
-
-                        /*
-                         * plannedDuration is the
-                         * meaningful focus duration
-                         * here because the focus
-                         * timer already reached zero
-                         * before check-in.
-                         */
-                        session.actualDuration =
-                            session.plannedDuration;
-
-                        await session.save();
-
-                        await Task.findByIdAndUpdate(
-                            session.task,
-                            {
-                                status:
-                                    "completed",
-
-                                completed:
-                                    true
-                            }
-                        );
-
-                        await SessionEvent.create({
-
-                            session:
-                                session._id,
-
-                            user:
+                        await completeSessionAndAdvance({
+                            userId:
                                 session.user,
 
-                            type:
-                                "SESSION_COMPLETE"
-                        });
+                            sessionId,
 
-                        io.to(sessionId).emit(
-                            "focus:complete",
-                            {
-                                sessionId
-                            }
-                        );
+                            owner:
+                                session.owner,
+
+                            io
+                        });
 
                         break;
                     }
