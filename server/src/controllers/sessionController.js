@@ -4,6 +4,8 @@ require("../models/FocusSession");
 const Task =
 require("../models/Task");
 
+const { Types: { ObjectId } } = require("mongoose");
+
 const CompanionSettings =
 require("../models/CompanionSettings");
 
@@ -15,12 +17,20 @@ const {
 } = require("../services/focusStateMachine");
 
 const {
+    getTaskProgress,
+} = require("../services/taskService");
+
+const {
     startSessionTimer,
     clearSessionTimer
 } = require(
     "../services/sessionTimerService"
 );
-
+const {
+    completeSessionAndAdvance
+} = require(
+    "../services/sessionCompletionService"
+);
 const ExpressError =
 require("../utils/ExpressError");
 
@@ -28,35 +38,41 @@ module.exports.startSession =
 async (req, res) => {
   const {
     taskId,
-    duration,
-    mode,
+    mode = "gentle",
     owner = "WEB"
-  } = req.body;
+} = req.body;
 
-  if (
-    !taskId ||
-    !duration
-  ) {
+  const sessionMode =
+    mode === "strict" ? "strict" : "gentle";
 
-    throw new ExpressError(
-      400,
-      "Task and duration required"
-    );
-  }
-  console.log("Logged in user:", req.identity.userId);
+  console.log("[startSession] Called by user:", req.identity.userId);
+  console.log("[startSession] Request body:", { taskId, mode, owner });
+  console.log("[startSession] Stack trace:", new Error().stack);
 
-  const existingSession = await FocusSession.findOne({
-    user: req.identity.userId,
-    status: {
-      $in: ["active", "paused", "check_in_pending", "snoozed"]
-    }
-  })
+  const existingSession =
+    await FocusSession.findOne({
+      user: req.identity.userId,
+      status: {
+        $in: [
+          "active",
+          "paused",
+          "check_in_pending",
+          "snoozed",
+          "recovery"
+        ]
+      }
+    })
     .sort({ startedAt: -1 })
     .populate("task");
 
-  console.log("Existing session:", existingSession);
+  console.log("[startSession] Existing session check:", {
+    found: !!existingSession,
+    sessionId: existingSession?._id,
+    status: existingSession?.status
+  });
 
   if (existingSession) {
+    console.log("[startSession] CONFLICT - Returning 409 with existing session");
     return res.status(409).json({
       success: false,
       conflict: "ACTIVE_SESSION",
@@ -66,46 +82,135 @@ async (req, res) => {
       session: existingSession
     });
   }
-
   const settings =
-    await CompanionSettings.findOne({
-      userId: req.identity.userId
-    });
+    await CompanionSettings.findOneAndUpdate(
+        {
+            userId: req.identity.userId
+        },
+        {
+            $setOnInsert: {
+                userId: req.identity.userId
+            }
+        },
+        {
+            new: true,
+            upsert: true,
+            setDefaultsOnInsert: true
+        }
+    );
+
+    // Validate that the requested task belongs to
+  // this user and is actually available to start.
+  const taskQuery = {
+    userId: req.identity.userId,
+    archived: {
+      $ne: true
+    },
+    status: "pending",
+    completed: false
+  };
+
+  if (taskId !== undefined && taskId !== null && taskId !== "") {
+    if (!ObjectId.isValid(taskId)) {
+      throw new ExpressError(
+        400,
+        "The selected task id is invalid."
+      );
+    }
+
+    taskQuery._id = taskId;
+  }
+
+  const task = await Task.findOne(
+    taskQuery
+  ).sort({
+    sequenceOrder: 1,
+    createdAt: 1
+  });
+
+  if (!task) {
+    throw new ExpressError(
+      400,
+      taskId
+        ? "The selected task is not available to start."
+        : "No pending task is available to start."
+    );
+  }
+  const scheduleTasks = await Task.find({
+    userId: req.identity.userId,
+    archived: {
+        $ne: true
+    },
+    completed: false,
+    status: {
+        $in: ["pending", "in_progress"]
+    }
+  });
+
+  const totalPlannedMinutes =
+      scheduleTasks.reduce(
+          (sum, item) =>
+              sum + Number(item.estimatedDuration || 0),
+          0
+      );
+    const plannedMinutes = Math.max(
+        1,
+        Math.floor(Number(task.estimatedDuration) || 1)
+    );
+
     const session =
-      await FocusSession.create({
+    await FocusSession.create({
         user: req.identity.userId,
-        task: taskId,
+        task: task._id,
 
         plannedDuration:
-          task.estimatedDuration,
+            plannedMinutes,
 
         remainingDuration:
-          task.estimatedDuration,
+            plannedMinutes,
 
-        mode,
+        originalPlannedMinutes:
+            totalPlannedMinutes,
+
+        totalPlannedMinutes:
+            totalPlannedMinutes,
+
+        originalTaskCount:
+            scheduleTasks.length,
+
+        mode: sessionMode,
         owner,
 
         status: STATES.ACTIVE,
         startedAt: new Date(),
 
-        // Snapshot focus preferences
         voiceResponseTimeout:
-          settings?.voiceResponseTimeout ?? 60,
+            settings.voiceResponseTimeout,
 
         snoozeDuration:
-          settings?.snoozeDuration ?? 5,
+            settings.snoozeDuration,
 
         maxSnoozes:
-          settings?.maxSnoozes ?? 3,
+            settings.maxSnoozes,
 
         snoozeCount: 0
-      });
+    });
 
-    console.log("SESSION CREATED");
-    console.log(session);
+    console.log("[startSession] ===== SESSION CREATED =====");
+    console.log("[startSession] New session:", {
+      _id: session._id,
+      user: session.user,
+      task: session.task,
+      status: session.status,
+      plannedDuration: session.plannedDuration,
+      remainingDuration: session.remainingDuration,
+      startedAt: session.startedAt,
+      mode: session.mode,
+      requestOwner: owner
+    });
 
     await Task.findByIdAndUpdate(
-      taskId,
+      task._id,
       {
         status:
           "in_progress"
@@ -124,7 +229,7 @@ clearSessionTimer(
 startSessionTimer(
     io,
     session._id.toString(),
-    duration
+    plannedMinutes
 );
 
   res.status(201).json({
@@ -217,13 +322,18 @@ async (req, res) => {
 
 const computeRemainingDuration = (session) => {
   if (!session) return null;
-  const baseDuration =
+  const baseDuration = Number(
     session.remainingDuration != null
       ? session.remainingDuration
-      : session.plannedDuration;
+      : session.plannedDuration
+  );
+
+  if (!Number.isFinite(baseDuration)) {
+    return 0;
+  }
 
   if (session.status === "paused") {
-    return baseDuration;
+    return Math.max(0, Math.round(baseDuration));
   }
 
   if (
@@ -234,19 +344,22 @@ const computeRemainingDuration = (session) => {
     return 0;
   }
 
-  if (session.startedAt && Number.isFinite(baseDuration)) {
+  if (session.startedAt) {
     const elapsedSeconds = Math.max(
       0,
       Math.floor((Date.now() - session.startedAt.getTime()) / 1000)
     );
-    return Math.max(0, Math.round(baseDuration * 60 - elapsedSeconds) / 60);
+    const remainingSeconds = Math.max(0, baseDuration * 60 - elapsedSeconds);
+    return Math.max(0, Math.ceil(remainingSeconds / 60));
   }
 
-  return baseDuration;
+  return Math.max(0, Math.round(baseDuration));
 };
 
-module.exports.resumeActiveSession =
+module.exports.resumeSession  =
 async (req,res)=>{
+    console.log("[resumeSession] Called by user:", req.identity.userId);
+    
     const session =
         await FocusSession.findOne({
             user: req.identity.userId,
@@ -255,58 +368,79 @@ async (req,res)=>{
                     "active",
                     "paused",
                     "check_in_pending",
-                    "snoozed"
+                    "snoozed",
+                    "recovery"
                 ]
             }
         })
         .sort({ startedAt: -1 })
         .populate("task");
 
-    if (session) {
-      session.remainingDuration = computeRemainingDuration(session);
-    }
+        console.log("[resumeSession] Query result:", {
+          found: !!session,
+          sessionId: session?._id,
+          status: session?.status,
+          plannedDuration: session?.plannedDuration,
+          remainingDuration: session?.remainingDuration,
+          startedAt: session?.startedAt
+        });
 
-    res.json({
-        session
-    });
+        let progress = {
+          currentTaskIndex: 1,
+          totalTasks: 1
+        };
+
+      if (session) {
+          session.remainingDuration =
+              computeRemainingDuration(session);
+
+          console.log("[resumeSession] Computed remaining duration:", session.remainingDuration);
+
+          progress = await getTaskProgress(
+              req.identity.userId,
+              session.task._id
+          );
+      } else {
+          console.log("[resumeSession] No active session found for user", req.identity.userId);
+      }
+
+      res.json({
+          session,
+          currentTaskIndex:
+              progress.currentTaskIndex,
+          totalTasks:
+              progress.totalTasks
+      });
 };
 
 module.exports.pauseSession =
-
 async (req,res)=>{
 
-const owner = req.body.owner || "WEB";
+  const owner = req.body.owner || "WEB";
 
-const session =
+  const session = await FocusSession.findOne({
+    _id: req.params.id,
+    user: req.identity.userId
+  });
 
-await FocusSession.findById(
-
-req.params.id
-
-);
-
-if(!session){
-
-throw new ExpressError(
-
-404,
-
-"Session not found"
-
-);
-
-}
+  if(!session){
+    throw new ExpressError(
+    404,
+    "Session not found"
+    );
+  }
 
 if (session.owner === "DESKTOP" && owner !== "DESKTOP") {
-
-throw new ExpressError(
-
-409,
-
-"Session is controlled by the desktop client"
-
-);
-
+  throw new ExpressError(
+  409,
+  "Session is controlled by the desktop client"
+  );
+}
+if (session.status !== STATES.ACTIVE) {
+  throw new ExpressError(
+    409,
+    "Only an active session can be paused."
+  );
 }
 
 const elapsedMinutes = session.startedAt
@@ -359,137 +493,132 @@ session
 
 };
 
-module.exports.resumePausedSession=
+module.exports.resumePausedSession =
+async (req, res) => {
 
-async(req,res)=>{
+    const owner =
+        req.body.owner || "WEB";
 
-const owner = req.body.owner || "WEB";
+    const session =
+        await FocusSession.findOne({
+            _id: req.params.id,
+            user: req.identity.userId
+        });
 
-const session=
+    if (!session) {
 
-await FocusSession.findById(
+        throw new ExpressError(
+            404,
+            "Session not found"
+        );
 
-req.params.id
+    }
 
-);
+    if (
+        session.owner === "DESKTOP" &&
+        owner !== "DESKTOP"
+    ) {
 
-if(!session){
-  throw new ExpressError(404, "Session not found");
-}
+        throw new ExpressError(
+            409,
+            "Session is controlled by the desktop client"
+        );
 
-if (session.owner === "DESKTOP" && owner !== "DESKTOP") {
+    }
 
-throw new ExpressError(
+    if (
+        session.status !==
+        STATES.PAUSED
+    ) {
 
-409,
+        throw new ExpressError(
+            409,
+            "Only a paused session can be resumed."
+        );
 
-"Session is controlled by the desktop client"
+    }
 
-);
+    const remaining =
+        Math.max(
+            0,
+            session.remainingDuration != null
+                ? session.remainingDuration
+                : session.plannedDuration
+        );
 
-}
+    session.status =
+        STATES.ACTIVE;
 
-const remaining = Math.max(
-  0,
-  session.remainingDuration != null
-    ? session.remainingDuration
-    : session.plannedDuration
-);
+    session.startedAt =
+        new Date();
 
-session.status="active";
-session.startedAt = new Date();
-session.remainingDuration = remaining;
-await session.save();
+    session.remainingDuration =
+        remaining;
 
-const io=
+    await session.save();
 
-req.app.get("io");
+    const io =
+        req.app.get("io");
 
-startSessionTimer(
+    startSessionTimer(
+        io,
+        session._id.toString(),
+        remaining
+    );
 
-io,
+    await SessionEvent.create({
 
-session._id.toString(),
+        session:
+            session._id,
 
-remaining
+        user:
+            session.user,
 
-);
+        type:
+            "SESSION_RESUMED",
 
-await SessionEvent.create({
+        metadata: {
+            remainingDuration:
+                remaining
+        }
 
-session:session._id,
+    });
 
-user:session.user,
+    res.json({
 
-type:"SESSION_RESUMED",
-metadata:{ remainingDuration: remaining }
+        message:
+            "Resumed",
 
-});
+        session
 
-res.json({
-
-message:"Resumed",
-
-session
-
-});
+    });
 
 };
 
-module.exports.skipSession=
+module.exports.completeSession =
+async (req, res) => {
 
-async(req,res)=>{
+    const owner =
+        req.body.owner || "WEB";
 
-const session=
+    const result =
+        await completeSessionAndAdvance({
+            userId:
+                req.identity.userId,
 
-await FocusSession.findById(
+            sessionId:
+                req.params.id,
 
-req.params.id
+            owner,
 
-);
+            io:
+                req.app.get("io")
+        });
 
-session.status="skipped";
-
-session.completedBy="SYSTEM";
-
-session.endedAt=new Date();
-
-await session.save();
-
-await Task.findByIdAndUpdate(
-
-session.task,
-
-{
-
-status:"skipped"
-
-}
-
-);
-
-clearSessionTimer(
-
-session._id.toString()
-
-);
-
-await SessionEvent.create({
-
-session:session._id,
-
-user:session.user,
-
-type:"SESSION_SKIPPED"
-
-});
-
-res.json({
-
-message:"Skipped"
-
-});
-
+    res.json({
+        success: true,
+        ...result
+    });
 };
 
 /*WHAT IS HAPPENING?

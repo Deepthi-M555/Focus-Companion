@@ -20,8 +20,14 @@ async (req, res) => {
   if (action === "resume") {
     const resumed = await resumeFromRecovery({
       userId,
-      clientType: req.body.clientType || req.identity?.clientType || "WEB",
-      userMode: req.body.mode || "gentle"
+      clientType:
+          req.body.clientType ||
+          req.identity?.clientType ||
+          "WEB",
+      userMode:
+          req.body.mode ||
+          "gentle",
+      io: req.app.get("io")
     });
     return res.json(resumed);
   }
@@ -39,12 +45,14 @@ async (req, res) => {
   const remainingTasks = req.body?.remainingTasks ||
     await Task.find({
       userId,
-      completed: false
+      archived: { $ne: true },
+      completed: false,
+      status: { $ne: "skipped" }
     });
 
   const recovered = recoverSchedule({
     remainingTasks,
-    availableMinutes: req.body?.availableMinutes ?? 480
+    availableMinutes: req.body?.availableMinutes ?? 0
   });
 
   await Promise.all(
@@ -63,7 +71,8 @@ async (req, res, next) => {
   try {
     const result = await skipAndResume({
       userId: req.identity?.userId,
-      clientType: req.body?.clientType || "WEB"
+      clientType: req.body?.clientType || "WEB",
+      io: req.app.get("io")
     });
 
     return res.json(result);

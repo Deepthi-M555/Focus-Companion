@@ -16,10 +16,10 @@ const {
 const {
     startSession,
     failSession,
-    resumeActiveSession,
+    resumeSession ,
     pauseSession,
     resumePausedSession,
-    skipSession
+    completeSession
 } = require("../controllers/sessionController");
 
 router.post(
@@ -28,18 +28,16 @@ router.post(
   wrapAsync(startSession)
 );
 
+router.get(
+    "/resume",
+    isLoggedIn,
+    wrapAsync(resumeSession )
+);
 router.post(
   "/fail/:id",
   isLoggedIn,
   wrapAsync(failSession)
 );
-
-router.get(
-    "/resume",
-    isLoggedIn,
-    wrapAsync(resumeActiveSession)
-);
-
 router.post(
   "/pause/:id",
   isLoggedIn,
@@ -57,12 +55,13 @@ router.post(
 );
 
 router.post(
-  "/skip/:id",
+  "/complete/:id",
   isLoggedIn,
   wrapAsync(
-    skipSession
+    completeSession
   )
 );
+
 
 module.exports = router;
 
@@ -93,7 +92,6 @@ Example:
 startSession()
 pauseSession()
 resumePausedSession()
-skipSession()
 failSession()
 
 This makes:
