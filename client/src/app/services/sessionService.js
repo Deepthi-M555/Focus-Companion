@@ -1,7 +1,9 @@
 import api from "./api";
 
 export async function startSession(data, owner = "WEB") {
-
+    console.log("[sessionService.startSession] Called with data:", { ...data, owner });
+    console.log("[sessionService.startSession] Stack trace:", new Error().stack);
+    
     const { data: response } =
         await api.post(
             "/sessions/start",
@@ -9,11 +11,9 @@ export async function startSession(data, owner = "WEB") {
         );
 
     return response;
-
 }
 
 export async function failSession(sessionId, owner = "WEB") {
-
     const { data } =
         await api.post(
             `/sessions/fail/${sessionId}`,
@@ -21,70 +21,52 @@ export async function failSession(sessionId, owner = "WEB") {
         );
 
     return data;
-
 }
 
 export async function resumeSession() {
-
     const { data } =
         await api.get(
             "/sessions/resume"
         );
 
     return data;
-
 }
 
-export async function resumeActiveSession() {
-    return resumeSession();
-}
-
-export async function pauseSession(sessionId, owner = "WEB"){
-
-    const{
-
-        data
-
-    }=await api.post(
-
-        `/sessions/pause/${sessionId}`,
-        { owner }
-
-    );
+export async function pauseSession(
+    sessionId,
+    owner = "WEB"
+) {
+    const { data } =
+        await api.post(
+            `/sessions/pause/${sessionId}`,
+            { owner }
+        );
 
     return data;
-
 }
 
-export async function resumePausedSession(sessionId, owner = "WEB"){
-
-    const{
-
-        data
-
-    }=await api.post(
-
-        `/sessions/resume/${sessionId}`,
-        { owner }
-
-    );
+export async function resumePausedSession(
+    sessionId,
+    owner = "WEB"
+) {
+    const { data } =
+        await api.post(
+            `/sessions/resume/${sessionId}`,
+            { owner }
+        );
 
     return data;
-
 }
 
-export async function skipSession(sessionId){
-
-    const{
-
-        data
-
-    }=await api.post(
-
-        `/sessions/skip/${sessionId}`
-
-    );
+export async function completeSession(
+    sessionId,
+    owner = "WEB"
+) {
+    const { data } =
+        await api.post(
+            `/sessions/complete/${sessionId}`,
+            { owner }
+        );
 
     return data;
-
 }
