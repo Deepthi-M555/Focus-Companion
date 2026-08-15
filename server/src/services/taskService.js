@@ -1,71 +1,69 @@
 const Task = require("../models/Task");
 
-async function saveSchedule({
-    userId,
-    tasks
-}) {
+function normalizeTaskDuration(value) {
+    const duration =
+        Number(value);
 
-    if (!Array.isArray(tasks)) {
-        throw new Error(
-            "Tasks must be an array."
-        );
+    if (
+        !Number.isFinite(duration) ||
+        duration <= 0
+    ) {
+        return null;
     }
 
-    /*
-     * Replace only tasks that have not started.
-     *
-     * Historical completed/skipped tasks remain history.
-     * Active in_progress task is never deleted here.
-     */
-    await Task.deleteMany({
-        userId,
-        status: "pending"
-    });
+    return Math.floor(duration);
+}
 
-    /*
-     * A newly generated timetable should contain
-     * only new/startable schedule blocks.
-     */
+/**
+ * Save a newly generated timetable.
+ *
+ * Pending tasks are replaced.
+ * Started/completed/skipped tasks are preserved.
+ */
+async function saveSchedule({ userId, tasks }) {
+    if (!Array.isArray(tasks)) {
+        throw new Error("Tasks must be an array.");
+    }
+
+    await Task.updateMany(
+        {
+            userId,
+            archived: {
+                $ne: true
+            }
+        },
+        {
+            $set: {
+                archived: true
+            }
+        }
+    );
+
     const documents = tasks
+        .map(task => ({
+            ...task,
+            estimatedDuration:
+                normalizeTaskDuration(
+                    task?.estimatedDuration
+                )
+        }))
         .filter(task =>
             task &&
             task.title &&
-            Number(task.estimatedDuration) > 0 &&
-            (
-                !task.status ||
-                task.status === "pending"
-            )
+            task.estimatedDuration > 0 &&
+            (!task.status || task.status === "pending")
         )
         .map((task, index) => ({
             userId,
-
             title: task.title,
-
-            description:
-                task.description || "",
-
-            estimatedDuration:
-                Number(
-                    task.estimatedDuration
-                ),
-
-            priority:
-                task.priority || 1,
-
-            type:
-                task.type || "ELASTIC",
-
-            fixedStartTime:
-                task.fixedStartTime || null,
-
-            fixedEndTime:
-                task.fixedEndTime || null,
-
-            sequenceOrder:
-                index + 1,
-
+            description: task.description || "",
+            estimatedDuration: task.estimatedDuration,
+            priority: task.priority || 1,
+            type: task.type || "ELASTIC",
+            fixedStartTime: task.fixedStartTime || null,
+            fixedEndTime: task.fixedEndTime || null,
+            sequenceOrder: index + 1,
             status: "pending",
-
             completed: false
         }));
 
@@ -73,35 +71,114 @@ async function saveSchedule({
         return [];
     }
 
-    return Task.insertMany(
-        documents
-    );
+    return Task.insertMany(documents);
 }
 
-
-async function loadTodaySchedule(
-    userId
-) {
-
+/**
+ * Returns the active timetable.
+ */
+async function loadActiveSchedule(userId) {
     return Task.find({
         userId,
-
+        archived: {
+            $ne: true
+        },
         completed: false,
-
         status: {
-            $in: [
-                "pending",
-                "in_progress"
-            ]
+            $in: ["pending", "in_progress"]
         }
-    })
-    .sort({
+    }).sort({
         sequenceOrder: 1
     });
 }
 
+async function loadTodaySchedule(userId) {
+    return Task.find({
+        userId,
+        archived: {
+            $ne: true
+        }
+    }).sort({
+        sequenceOrder: 1,
+        createdAt: 1
+    });
+}
+
+/**
+ * Returns the task currently in progress.
+ */
+async function getCurrentTask(userId) {
+    return Task.findOne({
+        userId,
+        archived: {
+            $ne: true
+        },
+        completed: false,
+        status: "in_progress"
+    });
+}
+
+async function getNextPendingTask(userId) {
+    return Task.findOne({
+        userId,
+        archived: {
+            $ne: true
+        },
+        completed: false,
+        status: "pending"
+    }).sort({
+        sequenceOrder: 1,
+        createdAt: 1
+    });
+}
+
+/**
+ * Checks whether there are pending tasks left.
+ */
+async function hasPendingTasks(userId) {
+    const count = await Task.countDocuments({
+        userId,
+        archived: {
+            $ne: true
+        },
+        completed: false,
+        status: "pending"
+    });
+
+    return count > 0;
+}
+
+async function getTaskProgress(userId, taskId) {
+
+    const tasks = await Task.find({
+        userId,
+        archived: {
+            $ne: true
+        }
+    }).sort({
+        sequenceOrder: 1,
+        createdAt: 1
+    });
+
+    const currentTaskIndex =
+        tasks.findIndex(
+            task =>
+                String(task._id) ===
+                String(taskId)
+        ) + 1;
+
+    return {
+        currentTaskIndex,
+        totalTasks: tasks.length
+    };
+}
 
 module.exports = {
     saveSchedule,
-    loadTodaySchedule
+    loadActiveSchedule,
+    loadTodaySchedule,
+    getCurrentTask,
+    getNextPendingTask,
+    hasPendingTasks,
+    getTaskProgress
 };
