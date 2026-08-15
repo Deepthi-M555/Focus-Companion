@@ -48,9 +48,18 @@ function createOverlay({
 
         });
 
-    overlay.loadURL(
-        "http://localhost:5174/overlay"
-    );
+    // Use process.env.NODE_ENV to determine if dev or production
+    const isDev = process.env.NODE_ENV === 'development' || process.env.ELECTRON_START_URL;
+    const overlayUrl = isDev
+        ? "http://localhost:5174/overlay"
+        : `file://${path.join(__dirname, "..", "client", "dist", "index.html")}#/overlay`;
+
+    overlay.loadURL(overlayUrl);
+    
+    if (isDev) {
+        overlay.webContents.openDevTools();
+    }
+    
     overlay.setVisibleOnAllWorkspaces(
         true
     );

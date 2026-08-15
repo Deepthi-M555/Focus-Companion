@@ -10,7 +10,7 @@ function registerOverlayIPC({
 
     ipcMain.handle(
         "show-overlay",
-        async () => {
+        async (_, data) => {
 
             try {
 
@@ -27,7 +27,12 @@ function registerOverlayIPC({
             }
 
             overlayWindow.show();
-
+            if (data) {
+                overlayWindow.webContents.send(
+                    "check-in-required",
+                    data
+                );
+            }
             return {
                 success: true,
                 visible: overlayWindow.isVisible()

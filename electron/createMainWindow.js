@@ -34,9 +34,17 @@ function createMainWindow() {
 
         });
 
-    win.loadURL(
-        "http://localhost:5174"
-    );
+    // Use process.env.NODE_ENV to determine if dev or production
+    const isDev = process.env.NODE_ENV === 'development' || process.env.ELECTRON_START_URL;
+    const startUrl = isDev
+        ? "http://localhost:5174"
+        : `file://${path.join(__dirname, "..", "client", "dist", "index.html")}`;
+
+    win.loadURL(startUrl);
+
+    if (isDev) {
+        win.webContents.openDevTools();
+    }
 
     return win;
 }

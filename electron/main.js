@@ -23,6 +23,11 @@ const registerPermissionsIPC =
 const registerNotificationIPC =
     require("./ipc/notificationIPC");
 
+// Set development environment if --dev flag is passed
+if (process.argv.includes("--dev")) {
+    process.env.NODE_ENV = "development";
+}
+
 let mainWindow;
 let overlayWindow;
 

@@ -38,9 +38,10 @@ contextBridge.exposeInMainWorld(
                 Boolean(enabled)
             ),
 
-        showOverlay: () =>
+        showOverlay: (data) =>
             ipcRenderer.invoke(
-                "show-overlay"
+                "show-overlay",
+                data
             ),
 
         hideOverlay: () =>
