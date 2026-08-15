@@ -11,7 +11,7 @@ export function connectSocket() {
     }
 
     socket.auth = {
-        token: localStorage.getItem("token")
+        token: sessionStorage.getItem("token")
     };
 
     socket.connect();
