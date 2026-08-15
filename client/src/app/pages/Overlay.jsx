@@ -144,6 +144,7 @@ export function Overlay() {
   };
 
   useEffect(() => {
+    window.electronAPI?.notifyOverlayReady?.();
     connectSocket();
 
     const handleElectronCheckIn = (data) => {
@@ -411,13 +412,15 @@ export function Overlay() {
             {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
           </button>
           <button 
-            className="p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors text-neutral-600 dark:text-neutral-400"
-            onClick={() => window.location.href = '/focus'}
-          >
-            <Maximize2 className="w-4 h-4" />
-          </button>
-          <button 
+            aria-label="Hide overlay"
             className="p-2 hover:bg-red-50 dark:hover:bg-red-950/30 text-red-500 rounded-lg transition-colors"
+            onClick={async () => {
+              try {
+                await window.electronAPI?.hideOverlay?.();
+              } catch (error) {
+                console.error("Unable to hide overlay:", error);
+              }
+            }}
           >
             <X className="w-4 h-4" />
           </button>

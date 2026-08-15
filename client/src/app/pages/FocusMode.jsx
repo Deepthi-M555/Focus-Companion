@@ -430,13 +430,16 @@ console.log(
   };
 
   useEffect(() => {
-    if (!isPaused && timeLeft > 0) {
-      const timer = setInterval(() => {
-        setTimeLeft((prev) => prev - 1);
-      }, 1000);
-      return () => clearInterval(timer);
+    if (!sessionId || isPaused || timeLeft <= 0) {
+      return undefined;
     }
-  }, [isPaused, timeLeft]);
+
+    const timer = window.setInterval(() => {
+      setTimeLeft((prev) => Math.max(0, prev - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [sessionId, isPaused]);
 
   const getSessionTimeLeftSeconds = (session) => {
     if (!session) {
@@ -587,7 +590,15 @@ console.log(
     return true;
   };
 
+  const beginSessionOnceRef = useRef(false);
+
   useEffect(() => {
+    if (beginSessionOnceRef.current) {
+      return;
+    }
+
+    beginSessionOnceRef.current = true;
+
     async function beginSession() {
       try {
         console.log("[FocusMode] beginSession() called on mount");
@@ -744,10 +755,14 @@ console.log(
         settings?.overlayEnabled !== false &&
         window.electronAPI?.showOverlay
     ) {
-        await window.electronAPI.showOverlay({
+        const overlayResult = await window.electronAPI.showOverlay({
             ...data,
             voiceEnabled: settings?.voiceEnabled !== false
         });
+
+        if (overlayResult?.inApp || overlayResult?.overlayShown === false) {
+            return;
+        }
 
         return;
     }

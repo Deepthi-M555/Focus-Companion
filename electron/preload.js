@@ -60,6 +60,11 @@ contextBridge.exposeInMainWorld(
                 options
             ),
 
+        notifyOverlayReady: () =>
+            ipcRenderer.send(
+                "overlay:renderer-ready"
+            ),
+
         onCheckInRequired:
             (callback) => {
 

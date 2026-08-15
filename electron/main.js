@@ -29,21 +29,55 @@ if (process.argv.includes("--dev")) {
 }
 
 let mainWindow;
-let overlayWindow;
+const overlayState = {
+    window: null,
+    ready: false,
+    pendingCheckIn: null
+};
+
+function isMainWindowForeground() {
+    return Boolean(
+        mainWindow &&
+        !mainWindow.isDestroyed() &&
+        mainWindow.isVisible() &&
+        mainWindow.isFocused()
+    );
+}
+
+function clearOverlayState() {
+    overlayState.ready = false;
+    overlayState.pendingCheckIn = null;
+    overlayState.window = null;
+}
 
 function ensureOverlayWindow() {
     if (
-        overlayWindow &&
-        !overlayWindow.isDestroyed()
+        overlayState.window &&
+        !overlayState.window.isDestroyed()
     ) {
-        return overlayWindow;
+        return overlayState.window;
     }
 
-    overlayWindow = createOverlay({
+    overlayState.window = createOverlay({
         app
     });
 
-    return overlayWindow;
+    overlayState.window.on(
+        "closed",
+        () => {
+            if (
+                overlayState.window &&
+                overlayState.window.isDestroyed()
+            ) {
+                clearOverlayState();
+            }
+        }
+    );
+
+    overlayState.ready = false;
+    overlayState.pendingCheckIn = null;
+
+    return overlayState.window;
 }
 
 function createTrackedMainWindow() {
@@ -85,12 +119,13 @@ app.whenReady().then(() => {
     mainWindow =
         createTrackedMainWindow();
 
-    overlayWindow =
-        ensureOverlayWindow();
+    ensureOverlayWindow();
 
     registerOverlayIPC({
         ipcMain,
-        overlayWindow
+        overlayState,
+        ensureOverlayWindow,
+        mainWindow: () => mainWindow
     });
 
     registerFocusIPC({
@@ -101,7 +136,7 @@ app.whenReady().then(() => {
     registerPermissionsIPC({
         ipcMain,
         systemPreferences,
-        overlayWindow
+        overlayWindow: overlayState.window
     });
 
     registerNotificationIPC({
