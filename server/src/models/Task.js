@@ -84,6 +84,11 @@ sequenceOrder: {
 isLocked: {
   type: Boolean,
   default: false
+},
+
+archived: {
+  type: Boolean,
+  default: false
 }
 
 }, {

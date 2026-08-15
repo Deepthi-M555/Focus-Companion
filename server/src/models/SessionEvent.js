@@ -31,13 +31,16 @@ new mongoose.Schema({
       "SESSION_RESUMED",
       "CHECK_IN_TRIGGERED",
       "CHECK_IN",
+      "CHECK_IN_CLARIFY",
+      "VOICE_TRANSCRIPTION_FAILED",
+      "VOICE_RESPONSE_REJECTED",
       "DISTRACTION",
       "SNOOZE",
       "SESSION_COMPLETE",
       "RECOVERY_TRIGGERED",
       "SESSION_SKIPPED",
       "RECOVERY_COMPLETED"
-    ],
+  ],
 
     required: true
   },
