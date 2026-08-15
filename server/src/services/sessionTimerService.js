@@ -11,6 +11,13 @@ const {
 
 const activeTimers = new Map();
 
+function logTimerOperationError(operation, sessionId, error) {
+    console.error(
+        `[sessionTimerService:${operation}] session=${sessionId}`,
+        error
+    );
+}
+
 
 const setTimer = (
     sessionId,
@@ -33,51 +40,80 @@ async (
     duration
 ) => {
 
-    clearSessionTimer(sessionId);
-
-    const session =
-        await FocusSession.findById(
+    try {
+        clearSessionTimer(
             sessionId
         );
 
-    if (!session) {
-        return;
-    }
+        const durationMinutes =
+            Number(duration);
 
-    const timer =
-        setTimeout(
-            async () => {
+        if (
+            !Number.isFinite(durationMinutes) ||
+            durationMinutes <= 0
+        ) {
 
-                try {
+            console.error(
+                "Invalid session timer duration:",
+                duration
+            );
 
-                    await triggerCheckIn(
-                        io,
-                        sessionId
-                    );
+            return;
+        }
 
-                } catch (error) {
+        const session =
+            await FocusSession.findById(
+                sessionId
+            );
 
-                    console.error(
-                        "Session timer error:",
-                        error
-                    );
+        if (!session) {
+            return;
+        }
 
-                    clearSessionTimer(
-                        sessionId
-                    );
-                }
+        const timer =
+            setTimeout(
+                async () => {
 
-            },
+                    try {
 
-            duration * 60 * 1000
+                        await triggerCheckIn(
+                            io,
+                            sessionId
+                        );
+
+                    } catch (error) {
+
+                        logTimerOperationError(
+                            "triggerCheckIn",
+                            sessionId,
+                            error
+                        );
+
+                        clearSessionTimer(
+                            sessionId
+                        );
+
+                    }
+
+                },
+
+                durationMinutes *
+                60 *
+                1000
+            );
+
+        activeTimers.set(
+            sessionId,
+            timer
         );
-
-    activeTimers.set(
-        sessionId,
-        timer
-    );
+    } catch (error) {
+        logTimerOperationError(
+            "startSessionTimer",
+            sessionId,
+            error
+        );
+    }
 };
-
 
 const triggerCheckIn =
 async (
@@ -88,28 +124,32 @@ async (
     clearSessionTimer(sessionId);
 
     const session =
-        await FocusSession.findById(
-            sessionId
-        );
+    await FocusSession.findById(
+        sessionId
+    );
 
-    if (!session) {
-        return;
-    }
+if (!session) {
+    return;
+}
 
-    if (
-        session.status !== STATES.ACTIVE &&
-        session.status !== STATES.SNOOZED
-    ) {
-        return;
-    }
+if (
+    session.status !== STATES.ACTIVE &&
+    session.status !== STATES.SNOOZED
+) {
+    return;
+}
 
-    session.status =
-        transition({
-            currentState:
-                session.status,
-            nextState:
-                STATES.CHECK_IN_PENDING
-        });
+const currentState =
+    session.status;
+
+const nextState =
+    transition({
+        currentState,
+        nextState:
+            STATES.CHECK_IN_PENDING
+    });
+
+    session.status = nextState;
 
     session.remainingDuration = 0;
 
@@ -165,50 +205,70 @@ async (
     sessionId
 ) => {
 
-    const session =
-        await FocusSession.findById(
-            sessionId
-        );
+    try {
+        const session =
+            await FocusSession.findById(
+                sessionId
+            );
 
-    if (!session) {
-        return;
+        if (!session) {
+            return;
+        }
+
+        const configuredTimeout =
+            Number(
+                session.voiceResponseTimeout ?? 60
+            );
+
+        const processingGraceSeconds = 5;
+
+        const timeout =
+            Math.max(
+                15,
+                configuredTimeout +
+                processingGraceSeconds
+            );
+
+        const responseTimer =
+            setTimeout(
+                async () => {
+
+                    try {
+
+                        await handleNoResponse(
+                            io,
+                            sessionId
+                        );
+
+                    } catch (error) {
+
+                        logTimerOperationError(
+                            "handleNoResponse",
+                            sessionId,
+                            error
+                        );
+
+                        clearSessionTimer(
+                            sessionId
+                        );
+                    }
+
+                },
+
+                timeout * 1000
+            );
+
+        setTimer(
+            sessionId,
+            responseTimer
+        );
+    } catch (error) {
+        logTimerOperationError(
+            "startResponseTimer",
+            sessionId,
+            error
+        );
     }
-
-    const timeout =
-        session.voiceResponseTimeout ?? 60;
-
-    const responseTimer =
-        setTimeout(
-            async () => {
-
-                try {
-
-                    await handleNoResponse(
-                        io,
-                        sessionId
-                    );
-
-                } catch (error) {
-
-                    console.error(
-                        "Check-in timeout error:",
-                        error
-                    );
-
-                    clearSessionTimer(
-                        sessionId
-                    );
-                }
-
-            },
-
-            timeout * 1000
-        );
-
-    setTimer(
-        sessionId,
-        responseTimer
-    );
 };
 
 
@@ -349,7 +409,7 @@ async (
         }
     );
 
-    startSnoozeTimer(
+    await startSnoozeTimer(
         io,
         sessionId
     );
@@ -362,50 +422,59 @@ async (
     sessionId
 ) => {
 
-    const session =
-        await FocusSession.findById(
-            sessionId
-        );
+    try {
+        const session =
+            await FocusSession.findById(
+                sessionId
+            );
 
-    if (!session) {
-        return;
+        if (!session) {
+            return;
+        }
+
+        const duration =
+            session.snoozeDuration ?? 5;
+
+        const snoozeTimer =
+            setTimeout(
+                async () => {
+
+                    try {
+
+                        await triggerCheckIn(
+                            io,
+                            sessionId
+                        );
+
+                    } catch (error) {
+
+                        logTimerOperationError(
+                            "snoozeTriggerCheckIn",
+                            sessionId,
+                            error
+                        );
+
+                        clearSessionTimer(
+                            sessionId
+                        );
+                    }
+
+                },
+
+                duration * 60 * 1000
+            );
+
+        setTimer(
+            sessionId,
+            snoozeTimer
+        );
+    } catch (error) {
+        logTimerOperationError(
+            "startSnoozeTimer",
+            sessionId,
+            error
+        );
     }
-
-    const duration =
-        session.snoozeDuration ?? 5;
-
-    const snoozeTimer =
-        setTimeout(
-            async () => {
-
-                try {
-
-                    await triggerCheckIn(
-                        io,
-                        sessionId
-                    );
-
-                } catch (error) {
-
-                    console.error(
-                        "Snooze timer error:",
-                        error
-                    );
-
-                    clearSessionTimer(
-                        sessionId
-                    );
-                }
-
-            },
-
-            duration * 60 * 1000
-        );
-
-    setTimer(
-        sessionId,
-        snoozeTimer
-    );
 };
 
 

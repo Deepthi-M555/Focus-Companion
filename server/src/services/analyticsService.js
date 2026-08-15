@@ -426,19 +426,6 @@ async function getAnalytics(userId) {
 
     }
 
-    const timeline = events
-        .sort(
-            (a, b) =>
-                new Date(a.createdAt) -
-                new Date(b.createdAt)
-        )
-        .map(event => ({
-            id: event._id,
-            type: event.type,
-            time: event.createdAt,
-            metadata: event.metadata
-        }));
-
     return {
 
         stats: {
@@ -461,9 +448,7 @@ async function getAnalytics(userId) {
 
         averageSession,
 
-        insight,
-
-        timeline
+        insight
 
     };
 

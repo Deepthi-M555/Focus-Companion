@@ -1,149 +1,57 @@
-function generateSchedule(tasks, startTime = new Date()) {
+const { buildTimeline } = require("./linkedScheduleService");
 
-    const elasticTasks =
-        tasks
-            .filter(
-                task =>
-                    task.type ===
-                    "ELASTIC"
-            )
-            .sort(
-                (a, b) =>
-                    b.priority -
-                    a.priority
-            );
+function normalizeDuration(value) {
+    const duration = Number(value);
 
-    const inelasticTasks =
-        tasks
-            .filter(
-                task =>
-                    task.type ===
-                    "INELASTIC"
-            )
-            .sort(
-                (a, b) =>
-                    new Date(a.fixedStartTime) -
-                    new Date(b.fixedStartTime)
-            );
-
-    const schedule = [];
-
-    let currentTime =
-        new Date(startTime);
-
-    for (const task of elasticTasks) {
-
-        const taskStart =
-            new Date(currentTime);
-
-        const taskEnd =
-            new Date(
-                taskStart.getTime() +
-                task.estimatedDuration *
-                60000
-            );
-
-        schedule.push({
-
-            taskId:
-                task._id,
-
-            title:
-                task.title,
-
-            type:
-                task.type,
-
-            priority:
-                task.priority,
-
-            estimatedDuration:
-                task.estimatedDuration,
-
-            status:
-                task.status,
-
-            startTime:
-                taskStart,
-
-            endTime:
-                taskEnd
-
-        });
-
-        /*
-            Adaptive Break Logic
-        */
-
-        let breakMinutes = 5;
-
-        if (
-            task.estimatedDuration >= 90
-        ) {
-
-            breakMinutes = 15;
-
-        } else if (
-            task.estimatedDuration >= 45
-        ) {
-
-            breakMinutes = 10;
-
-        }
-
-        currentTime =
-            new Date(
-                taskEnd.getTime() +
-                breakMinutes * 60000
-            );
-
+    if (
+        !Number.isFinite(duration) ||
+        duration <= 0
+    ) {
+        return null;
     }
 
-    /*
-        Fixed Tasks
-    */
-
-    for (const task of inelasticTasks) {
-
-        schedule.push({
-
-            taskId:
-                task._id,
-
-            title:
-                task.title,
-
-            type:
-                task.type,
-
-            priority:
-                task.priority,
-
-            estimatedDuration:
-                task.estimatedDuration,
-
-            status:
-                task.status,
-
-            startTime:
-                task.fixedStartTime,
-
-            endTime:
-                task.fixedEndTime
-
-        });
-
-    }
-
-    schedule.sort(
-        (a, b) =>
-            new Date(a.startTime) -
-            new Date(b.startTime)
+    return Math.max(
+        1,
+        Math.floor(duration)
     );
+}
 
-    return schedule;
+function generateSchedule(tasks = []) {
+    if (!Array.isArray(tasks)) {
+        return [];
+    }
+
+    return buildTimeline(tasks)
+        .map((task, index) => {
+            const estimatedDuration =
+                normalizeDuration(
+                    task.estimatedDuration
+                );
+
+            if (!estimatedDuration) {
+                return null;
+            }
+
+            return {
+                ...(
+                    task.toObject
+                        ? task.toObject()
+                        : task
+                ),
+                estimatedDuration,
+                sequenceOrder:
+                    Number(task.sequenceOrder) ||
+                    index + 1,
+                status:
+                    task.status || "pending",
+                completed:
+                    Boolean(task.completed)
+            };
+        })
+        .filter(Boolean);
 }
 
 module.exports = {
-    generateSchedule
+    generateSchedule,
+    normalizeDuration
 };
