@@ -212,61 +212,21 @@ export function Dashboard() {
 
   const toggleRecording = async () => {
     if (isRecording) {
+        let blob = null;
+
         try {
             setIsRecording(false);
             setIsTranscribing(true);
 
-            try {
-                const blob =
-                    await voiceRecorder.current.stop();
+            blob = await voiceRecorder.current.stop();
 
-                if (!blob || blob.size === 0) {
-                    toast.error("No voice was captured.");
-                    return;
-                }
-
-                const result =
-                    await uploadVoice(blob);
-
-                const transcript =
-                    result?.transcript?.trim();
-
-                if (!transcript) {
-                    toast.error("No speech was detected.");
-                    return;
-                }
-
-                setInputValue(prev =>
-                    prev
-                        ? `${prev} ${transcript}`
-                        : transcript
-                );
-
-            } catch (error) {
-                console.error(
-                    "Dashboard voice input failed:",
-                    error
-                );
-
-                toast.error(
-                    error?.message ||
-                    "Unable to process voice input."
-                );
-
-            } finally {
-                setIsTranscribing(false);
-                setIsRecording(false);
-            }
             if (!blob || blob.size === 0) {
                 toast.error("No voice was captured.");
                 return;
             }
 
-            const result =
-                await uploadVoice(blob);
-
-            const transcript =
-                result?.transcript?.trim();
+            const result = await uploadVoice(blob);
+            const transcript = result?.transcript?.trim();
 
             if (!transcript) {
                 toast.error("No speech was detected.");
@@ -278,7 +238,6 @@ export function Dashboard() {
                     ? `${prev} ${transcript}`
                     : transcript
             );
-
         } catch (error) {
             console.error(
                 "Dashboard voice input failed:",
@@ -289,8 +248,8 @@ export function Dashboard() {
                 error?.message ||
                 "Unable to process voice input."
             );
-
         } finally {
+            setIsTranscribing(false);
             setIsRecording(false);
         }
 
@@ -299,9 +258,7 @@ export function Dashboard() {
 
     try {
         await voiceRecorder.current.start();
-
         setIsRecording(true);
-
     } catch (error) {
         console.error(
             "Dashboard microphone failed:",

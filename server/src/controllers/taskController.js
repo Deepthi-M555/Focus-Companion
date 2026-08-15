@@ -75,8 +75,7 @@ async (
     if (activeSession) {
         throw new ExpressError(
             409,
-            "Finish or 
-            the current focus session before replacing the timetable."
+            "Finish or the current focus session before replacing the timetable."
         );
     }
 
