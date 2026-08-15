@@ -1,50 +1,59 @@
-import axios from "axios";
-import {VOICE_CONFIG} from "../config/voiceConfig";
+import api from "./api";
+import { VOICE_CONFIG } from "../config/voiceConfig";
 
-export async function uploadVoice(blob){
+export async function uploadVoice(blob) {
 
-const formData=new FormData();
+    if (
+        !blob ||
+        blob.size === 0
+    ) {
+        throw new Error(
+            "No audio was recorded."
+        );
+    }
 
-formData.append(
-"audio",
-blob,
-"voice.webm"
-);
+    const formData =
+        new FormData();
 
-try{
+    formData.append(
+        "audio",
+        blob,
+        "voice.webm"
+    );
 
-const response=await axios.post(
+    try {
 
-"/api/voice/checkin",
+        const response =
+            await api.post(
+                "/voice/checkin",
+                formData,
+                {
+                    timeout:
+                        VOICE_CONFIG.API_TIMEOUT_MS
+                }
+            );
 
-formData,
+        return response.data;
 
-{
+    } catch (error) {
+        const status =
+            error.response?.status;
+        const voiceError =
+            new Error(
+                error.response?.data?.error?.message ||
+                error.response?.data?.message ||
+                error.message ||
+                "Voice upload failed."
+            );
 
-headers:{
-"Content-Type":"multipart/form-data"
-},
+        voiceError.status = status;
+        voiceError.code =
+            status === 503
+                ? "VOICE_SERVICE_UNAVAILABLE"
+                : status
+                ? "VOICE_UPLOAD_FAILED"
+                : "VOICE_NETWORK_ERROR";
 
-timeout:VOICE_CONFIG.API_TIMEOUT_MS
-
-}
-
-);
-
-return response.data;
-
-}catch(error){
-
-throw new Error(
-
-error.response?.data?.message||
-
-error.message||
-
-"Voice upload failed."
-
-);
-
-}
-
+        throw voiceError;
+    }
 }
