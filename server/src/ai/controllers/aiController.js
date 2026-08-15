@@ -39,6 +39,12 @@ const {
     "../services/geminiService"
 );
 
+const {
+    applyDurationGuardrail
+} = require(
+    "../utils/durationGuardrail"
+);
+
 const ExpressError = require("../../utils/ExpressError");
 
 exports.chat = async (
@@ -51,8 +57,6 @@ exports.chat = async (
         const {
 
             message,
-
-            behaviorInsights = {},
 
             analytics = {}
 
@@ -83,8 +87,6 @@ exports.chat = async (
                 userMessage:
                     message,
 
-                behaviorInsights,
-
                 analytics,
 
                 personality
@@ -97,16 +99,12 @@ exports.chat = async (
             );
 
         executeAction({
-
             action:
                 aiResponse.action,
-
             io:
                 req.app.get("io"),
-
             userId:
                 req.identity.userId
-
         });
                 
         /*
@@ -122,8 +120,11 @@ exports.chat = async (
 
         ) {
 
-            const tasks =
-                aiResponse.data.tasks || [];
+           const tasks =
+            applyDurationGuardrail(
+                aiResponse.data.tasks || [],
+                message
+            );
 
             const schedule =
                 generateSchedule(
@@ -257,9 +258,7 @@ Return ONLY the updated study tasks.
 
             personality,
 
-            analytics: {},
-
-            behaviorInsights: {}
+            analytics: {}
 
         });
 
@@ -269,11 +268,11 @@ Return ONLY the updated study tasks.
         );
 
     const mergedTasks = [
-
         ...existingTasks,
-
-        ...(aiResponse.data.tasks || [])
-
+        ...applyDurationGuardrail(
+            aiResponse.data.tasks || [],
+            message
+        )
     ];
 
     const schedule =
