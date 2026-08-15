@@ -3,70 +3,152 @@ class VoiceRecorder {
     constructor() {
 
         this.mediaRecorder = null;
-
+        this.stream = null;
         this.chunks = [];
 
     }
 
     async start() {
 
-        const stream =
-            await navigator.mediaDevices.getUserMedia({
+        if (
+            typeof navigator === "undefined" ||
+            !navigator.mediaDevices?.getUserMedia
+        ) {
+            const error =
+                new Error("Microphone capture is unavailable in this browser.");
+            error.code = "MICROPHONE_UNAVAILABLE";
+            throw error;
+        }
 
-                audio: true
+        if (
+            typeof MediaRecorder === "undefined"
+        ) {
+            const error =
+                new Error("MediaRecorder is unavailable in this browser.");
+            error.code = "MEDIA_RECORDER_UNAVAILABLE";
+            throw error;
+        }
 
-            });
+        try {
+            this.stream =
+                await navigator.mediaDevices.getUserMedia({
+                    audio: true
+                });
+        } catch (error) {
+            error.code =
+                error.name === "NotAllowedError"
+                    ? "MICROPHONE_PERMISSION_DENIED"
+                    : "MICROPHONE_CAPTURE_FAILED";
+            throw error;
+        }
 
         this.chunks = [];
 
-        this.mediaRecorder =
-            new MediaRecorder(stream);
+        const mimeType =
+            MediaRecorder.isTypeSupported(
+                "audio/webm;codecs=opus"
+            )
+                ? "audio/webm;codecs=opus"
+                : "audio/webm";
 
-        this.mediaRecorder.ondataavailable = (
+        try {
+            this.mediaRecorder =
+                new MediaRecorder(
+                    this.stream,
+                    { mimeType }
+                );
+        } catch (error) {
+            this.stream
+                ?.getTracks()
+                .forEach(
+                    track =>
+                        track.stop()
+                );
+            error.code = "MEDIA_RECORDER_FAILED";
+            throw error;
+        }
 
-            event
+        this.mediaRecorder.ondataavailable =
+            (event) => {
 
-        ) => {
-
-            this.chunks.push(event.data);
-
-        };
+                if (
+                    event.data?.size > 0
+                ) {
+                    this.chunks.push(
+                        event.data
+                    );
+                }
+            };
 
         this.mediaRecorder.start();
-
     }
 
     stop() {
 
-        return new Promise(resolve => {
+        return new Promise(
+            (resolve, reject) => {
 
-            this.mediaRecorder.onstop = () => {
+                if (!this.mediaRecorder) {
 
-                const blob =
-                    new Blob(
-
-                        this.chunks,
-
-                        {
-
+                    resolve(
+                        new Blob([], {
                             type:
-
                                 "audio/webm"
-
-                        }
-
+                        })
                     );
 
-                resolve(blob);
+                    return;
+                }
 
-            };
+                this.mediaRecorder.onstop =
+                    () => {
 
-            this.mediaRecorder.stop();
+                        const blob =
+                            new Blob(
+                                this.chunks,
+                                {
+                                    type:
+                                        this.mediaRecorder.mimeType ||
+                                        "audio/webm"
+                                }
+                            );
 
-        });
+                        this.stream
+                            ?.getTracks()
+                            .forEach(
+                                track =>
+                                    track.stop()
+                            );
 
+                        this.mediaRecorder = null;
+                        this.stream = null;
+                        this.chunks = [];
+
+                        resolve(blob);
+                    };
+
+                this.mediaRecorder.onerror =
+                    (event) => {
+
+                        this.stream
+                            ?.getTracks()
+                            .forEach(
+                                track =>
+                                    track.stop()
+                            );
+
+                        reject(
+                            event.error ||
+                            new Error(
+                                "Audio recording failed."
+                            )
+                        );
+                    };
+
+                this.mediaRecorder.stop();
+            }
+        );
     }
-
 }
 
 export default VoiceRecorder;
