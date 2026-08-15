@@ -92,9 +92,21 @@ module.exports.saveSetup = async (req, res) => {
 module.exports.getSetup = async (req, res) => {
 
     const setup =
-        await CompanionSettings.findOne({
+    await CompanionSettings.findOneAndUpdate(
+        {
             userId: req.identity.userId
-        });
+        },
+        {
+            $setOnInsert: {
+                userId: req.identity.userId
+            }
+        },
+        {
+            new: true,
+            upsert: true,
+            setDefaultsOnInsert: true
+        }
+    );
 
     res.status(200).json({
         setup

@@ -11,10 +11,22 @@ module.exports.getSettings = async (req, res) => {
         req.identity.userId
     ).select("name email");
 
-    const setup=
-    await CompanionSettings.findOne({
-    userId:req.identity.userId
-    });
+    const setup =
+    await CompanionSettings.findOneAndUpdate(
+        {
+            userId: req.identity.userId
+        },
+        {
+            $setOnInsert: {
+                userId: req.identity.userId
+            }
+        },
+        {
+            new: true,
+            upsert: true,
+            setDefaultsOnInsert: true
+        }
+    );
 
     res.json({
 
@@ -35,13 +47,13 @@ module.exports.getSettings = async (req, res) => {
             setup?.startupEnabled ?? false,
 
         voiceResponseTimeout:
-            setup?.voiceResponseTimeout ?? 60,
+            setup?.voiceResponseTimeout,
 
         snoozeDuration:
-            setup?.snoozeDuration ?? 5,
+            setup?.snoozeDuration ,
 
         maxSnoozes:
-            setup?.maxSnoozes ?? 3
+            setup?.maxSnoozes
     });
 
 };
