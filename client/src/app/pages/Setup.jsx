@@ -41,16 +41,15 @@ export function Setup() {
             );
 
             setVoiceResponseTimeout(
-                String(setup.voiceResponseTimeout ?? 60)
+                String(setup.voiceResponseTimeout)
             );
+
             setSnoozeDuration(
-                String(
-                    setup.snoozeDuration
-                )
+                String(setup.snoozeDuration)
             );
 
             setMaxSnoozes(
-                String(setup.maxSnoozes ?? 3)
+                String(setup.maxSnoozes)
             );
         }
         catch (error) {
@@ -158,7 +157,9 @@ export function Setup() {
 
               <Select
                 value={voiceResponseTimeout}
-                onValueChange={(e) => setVoiceResponseTimeout(e.target.value)}
+                onChange={(e) =>
+                    setVoiceResponseTimeout(e.target.value)
+                }
               >
                 <option value="30">30 Seconds</option>
                 <option value="45">45 Seconds</option>
@@ -178,7 +179,12 @@ export function Setup() {
             <div className="grid grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label>Snooze Duration</Label>
-                <Select value={snoozeDuration} onValueChange={(e) => setSnoozeDuration(e.target.value)}>
+                <Select
+                    value={snoozeDuration}
+                    onChange={(e) =>
+                        setSnoozeDuration(e.target.value)
+                    }
+                >
                   <option value="2">2 minutes</option>
                   <option value="5">5 minutes</option>
                   <option value="10">10 minutes</option>
@@ -187,7 +193,12 @@ export function Setup() {
               </div>
               <div className="space-y-2">
                 <Label>Maximum Snoozes</Label>
-                <Select value={maxSnoozes} onValueChange={(e) => setMaxSnoozes(e.target.value)}>
+                <Select
+                    value={maxSnoozes}
+                    onChange={(e) =>
+                        setMaxSnoozes(e.target.value)
+                    }
+                >
                   <option value="1">1 time</option>
                   <option value="2">2 times</option>
                   <option value="3">3 times</option>

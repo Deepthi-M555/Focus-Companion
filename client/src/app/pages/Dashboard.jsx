@@ -1,14 +1,17 @@
 import { useState, useRef, useEffect } from "react";
-import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { Mic, Send, Sparkles, StopCircle, Target } from "lucide-react";
 import { Button } from "../components/ui/Button.jsx";
 import { toast } from "sonner";
 
+import VoiceRecorder from "../services/voiceRecorder";
+import { uploadVoice } from "../services/voiceUploadService";
+
 import { chat } from "../services/dashboardService";
-import { loadTodaySchedule} from "../services/taskService";
-import { ProfileAvatar } from "../components/ProfileAvatar.jsx";
-import {resumeActiveSession,failSession} from "../services/sessionService";
+import { loadActiveSchedule} from "../services/taskService";
+import {resumeSession,failSession} from "../services/sessionService";
+import { getScopedStorageKey, clearUserScopedClientState } from "../utils/token";
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -57,22 +60,22 @@ const formatTaskMinutes = (tasks = []) => {
 export function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { profile = { name: "", email: "", avatar: "" } } = useOutletContext() || {};
   const [inputValue, setInputValue] = useState("");
   const [isRecording, setIsRecording] = useState(false);
-  const [isSending, setIsSending] = useState(false);
-  const [showActiveSessionModal, setShowActiveSessionModal] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isSending, setIsSending] = useState(false);const [showActiveSessionModal, setShowActiveSessionModal] = useState(false);
   const [pendingPrompt, setPendingPrompt] = useState("");
   const [activeSession, setActiveSession] = useState(null);
   const [todayTasks, setTodayTasks] = useState([]);
   const [messages, setMessages] = useState(() => {
-  const storedMessages = sessionStorage.getItem("dashboardMessages");
+  const storageKey = getScopedStorageKey("dashboardMessages");
+  const storedMessages = sessionStorage.getItem(storageKey);
 
     if (storedMessages) {
       try {
         return JSON.parse(storedMessages);
       } catch {
-        sessionStorage.removeItem("dashboardMessages");
+        sessionStorage.removeItem(storageKey);
       }
     }
 
@@ -80,10 +83,11 @@ export function Dashboard() {
   });
 
   const bottomRef = useRef(null);
-
+  const voiceRecorder = useRef(new VoiceRecorder());
+  
   const fetchSchedule = async () => {
     try {
-      const response = await loadTodaySchedule();
+      const response = await loadActiveSchedule();
       setTodayTasks(response?.schedule || []);
     } catch {
       setTodayTasks([]);
@@ -95,7 +99,7 @@ export function Dashboard() {
   }, [messages]);
 
   useEffect(() => {
-    sessionStorage.setItem("dashboardMessages", JSON.stringify(messages));
+    sessionStorage.setItem(getScopedStorageKey("dashboardMessages"), JSON.stringify(messages));
   }, [messages]);
 
   useEffect(() => {
@@ -122,10 +126,10 @@ export function Dashboard() {
     try {
         const response = await chat(userMessage);
         const generatedTasks = response.data?.tasks || [];
-        sessionStorage.removeItem("pendingSchedule");
+        sessionStorage.removeItem(getScopedStorageKey("pendingSchedule"));
         if (generatedTasks.length) {
             sessionStorage.setItem(
-                "pendingSchedule",
+                getScopedStorageKey("pendingSchedule"),
                 JSON.stringify(generatedTasks)
             );
         }
@@ -160,14 +164,19 @@ export function Dashboard() {
         return;
     }
     try {
-        const active = await resumeActiveSession();
+        const active = await resumeSession();
         console.log(active);
         if (active?.session) {
-        setActiveSession(active.session);
-        setPendingPrompt(inputValue);
-        setShowActiveSessionModal(true);
-        return;
-      }
+            if (active.session.status === "recovery") {
+                navigate("/recovery");
+                return;
+            }
+
+            setActiveSession(active.session);
+            setPendingPrompt(inputValue);
+            setShowActiveSessionModal(true);
+            return;
+        }
     }
     catch {
         // No active session
@@ -201,12 +210,110 @@ export function Dashboard() {
     }
   };
 
-  const toggleRecording = () => {
+  const toggleRecording = async () => {
     if (isRecording) {
-      setIsRecording(false);
-      setInputValue(prev => prev + (prev ? " " : "") + "I have 3 hours and need to study DSA and OS.");
-    } else {
-      setIsRecording(true);
+        try {
+            setIsRecording(false);
+            setIsTranscribing(true);
+
+            try {
+                const blob =
+                    await voiceRecorder.current.stop();
+
+                if (!blob || blob.size === 0) {
+                    toast.error("No voice was captured.");
+                    return;
+                }
+
+                const result =
+                    await uploadVoice(blob);
+
+                const transcript =
+                    result?.transcript?.trim();
+
+                if (!transcript) {
+                    toast.error("No speech was detected.");
+                    return;
+                }
+
+                setInputValue(prev =>
+                    prev
+                        ? `${prev} ${transcript}`
+                        : transcript
+                );
+
+            } catch (error) {
+                console.error(
+                    "Dashboard voice input failed:",
+                    error
+                );
+
+                toast.error(
+                    error?.message ||
+                    "Unable to process voice input."
+                );
+
+            } finally {
+                setIsTranscribing(false);
+                setIsRecording(false);
+            }
+            if (!blob || blob.size === 0) {
+                toast.error("No voice was captured.");
+                return;
+            }
+
+            const result =
+                await uploadVoice(blob);
+
+            const transcript =
+                result?.transcript?.trim();
+
+            if (!transcript) {
+                toast.error("No speech was detected.");
+                return;
+            }
+
+            setInputValue(prev =>
+                prev
+                    ? `${prev} ${transcript}`
+                    : transcript
+            );
+
+        } catch (error) {
+            console.error(
+                "Dashboard voice input failed:",
+                error
+            );
+
+            toast.error(
+                error?.message ||
+                "Unable to process voice input."
+            );
+
+        } finally {
+            setIsRecording(false);
+        }
+
+        return;
+    }
+
+    try {
+        await voiceRecorder.current.start();
+
+        setIsRecording(true);
+
+    } catch (error) {
+        console.error(
+            "Dashboard microphone failed:",
+            error
+        );
+
+        setIsRecording(false);
+
+        toast.error(
+            error?.message ||
+            "Unable to access the microphone."
+        );
     }
   };
 
@@ -223,13 +330,6 @@ export function Dashboard() {
         <div>
           <h2 className="text-2xl font-light tracking-tight">Focus Dashboard</h2>
           <p className="text-neutral-500 text-sm">Tell FYNIX what you need to accomplish</p>
-        </div>
-        <div className="flex min-w-0 items-center gap-3">
-          <ProfileAvatar profile={profile} />
-          <div className="min-w-0 text-right">
-            <p className="truncate text-sm font-medium">{profile.name || "User"}</p>
-            <p className="truncate text-xs text-neutral-500">{profile.email || "Active user"}</p>
-          </div>
         </div>
       </header>
 
@@ -302,7 +402,7 @@ export function Dashboard() {
         <div className="max-w-3xl mx-auto relative group">
           
           <AnimatePresence>
-            {isRecording && (
+             {(isRecording || isTranscribing) && (
               <motion.div 
                 initial={{ opacity: 0, y: 10, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -320,7 +420,17 @@ export function Dashboard() {
                       />
                     ))}
                   </div>
-                  <span className="text-sm font-medium animate-pulse text-red-500">Listening...</span>
+                  <span
+                      className={`text-sm font-medium ${
+                          isTranscribing
+                              ? "text-blue-500"
+                              : "animate-pulse text-red-500"
+                      }`}
+                  >
+                      {isTranscribing
+                          ? "Transcribing..."
+                          : "Listening..."}
+                  </span>
                 </div>
               </motion.div>
             )}
@@ -330,6 +440,11 @@ export function Dashboard() {
             
             <textarea
               value={inputValue}
+              disabled={
+                  isRecording ||
+                  isTranscribing ||
+                  isSending
+              }
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -345,6 +460,7 @@ export function Dashboard() {
             <div className="flex items-center gap-1 mb-1 mr-1">
               <button
                 onClick={toggleRecording}
+                disabled={isTranscribing || isSending}
                 className={`p-3 rounded-full transition-colors flex-shrink-0 ${
                   isRecording 
                     ? "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400" 
@@ -356,7 +472,12 @@ export function Dashboard() {
               
               <button
                 onClick={handleSend}
-                disabled={!inputValue.trim() || isSending}
+                disabled={
+                    !inputValue.trim() ||
+                    isSending ||
+                    isRecording ||
+                    isTranscribing
+                }
                 className="p-3 bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-800 dark:hover:bg-neutral-200 transition-colors flex-shrink-0"
               >
                 <Send className={`w-5 h-5 ${isSending ? "animate-pulse" : ""}`} />
@@ -416,4 +537,3 @@ export function Dashboard() {
     </div>
   );
 }
- 

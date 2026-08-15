@@ -12,30 +12,32 @@ import {
 } from "lucide-react";
 import { Button } from "../components/ui/Button.jsx";
 import { useEffect } from "react";
-import { getSchedule } from "../services/scheduleService";
-import { saveSchedule } from "../services/taskService";
+import {
+  loadActiveSchedule,
+  saveSchedule,
+} from "../services/taskService";
+import { getScopedStorageKey } from "../utils/token";
 import {
   startSession,
   failSession,
-  resumeActiveSession
+  resumeSession as resumeActiveSession
 } from "../services/sessionService";
 import { toast } from "sonner";
-import voiceSessionService from "../services/voiceSessionService";
 
 export function Timetable() {
   const navigate = useNavigate();
 
   const [blocks, setBlocks] = useState([]);
-  const [hasPendingSchedule, setHasPendingSchedule] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [activeConflict, setActiveConflict] = useState(null);
-  const [pendingStartTask, setPendingStartTask] = useState(null);
   const [isResolvingConflict, setIsResolvingConflict] = useState(false);
+  const [pendingStartTask, setPendingStartTask] = useState(null);
+  const [selectedMode, setSelectedMode] = useState("gentle");
 
   useEffect(() => {
     async function loadSchedule() {
       const pending =
-        sessionStorage.getItem("pendingSchedule");
+        sessionStorage.getItem(getScopedStorageKey("pendingSchedule"));
 
       if (pending) {
         try {
@@ -45,7 +47,6 @@ export function Timetable() {
             Array.isArray(parsed) ? parsed : []
           );
 
-          setHasPendingSchedule(true);
         } catch (error) {
           console.error(
             "Invalid pending schedule:",
@@ -53,7 +54,7 @@ export function Timetable() {
           );
 
           sessionStorage.removeItem(
-            "pendingSchedule"
+            getScopedStorageKey("pendingSchedule")
           );
         }
 
@@ -62,15 +63,13 @@ export function Timetable() {
 
       try {
         const response =
-          await getSchedule();
+          await loadActiveSchedule();
 
         setBlocks(
           Array.isArray(response.schedule)
             ? response.schedule
             : []
         );
-
-        setHasPendingSchedule(false);
 
       } catch (error) {
         console.error(
@@ -88,184 +87,210 @@ export function Timetable() {
   }, []);
 
   const getFirstStartableTask = (tasks = []) => {
-    return tasks.find(
-      task => task.status === "pending"
-    ) || null;
+    return (
+        tasks.find(
+            task =>
+                task.status === "pending"
+        ) || null
+    );
   };
 
   const startFocusForTask = async (task) => {
-    if (!task?._id) {
-      throw new Error("Timetable task was not saved.");
-    }
-
-    if (!Number.isFinite(task.estimatedDuration) || task.estimatedDuration <= 0) {
-      throw new Error("Timetable task missing a valid duration.");
-    }
-
     try {
-      const activeSessionResponse = await resumeActiveSession();
+        const activeSessionResponse =
+            await resumeActiveSession();
 
-      console.log("===== ACTIVE SESSION =====");
-      console.log(activeSessionResponse);
+        if (activeSessionResponse?.session) {
+            navigate("/focus");
+            return;
+        }
 
-      if (activeSessionResponse?.session) {
-        voiceSessionService.setSession(activeSessionResponse.session._id);
+        await startSession({
+            taskId:
+                task?._id,
+            mode: selectedMode
+        });
+
         navigate("/focus");
-        return;
-      }
 
-      const response = await startSession({
-        taskId: task._id,
-        duration: task.estimatedDuration,
-        mode: "gentle"
-      });
-
-      voiceSessionService.setSession(
-        response.session._id
-      );
-
-      navigate("/focus");
     } catch (error) {
-      if (error.response?.status === 409) {
-        setActiveConflict(error.response.data.session);
-        setPendingStartTask(task);
-        return;
-      }
 
-      throw error;
+        if (error.response?.status === 409) {
+            setActiveConflict(
+                error.response.data.session
+            );
+            setPendingStartTask(task);
+            return;
+        }
+
+        throw error;
     }
   };
 
   const handleSaveAndStart = async () => {
-    if (!blocks.length) {
-      toast.error(
-        "Add a task before starting focus mode."
-      );
-      return;
-    }
 
     setIsSaving(true);
 
     try {
 
-      /*
-      * CASE 1:
-      * Newly generated timetable.
-      * It does not exist in MongoDB yet.
-      */
-      if (hasPendingSchedule) {
+        /*
+         * FIRST:
+         * If a session is already active,
+         * resume it instead of looking for
+         * another pending task.
+         */
+        const active =
+            await resumeActiveSession();
 
-        const response =
-          await saveSchedule({
-            tasks: blocks
-          });
+        if (active?.session) {
 
-        const savedTasks =
-          response.tasks ||
-          response.schedule ||
-          [];
+            if (
+                active.session.status ===
+                "recovery"
+            ) {
+                navigate(
+                    "/recovery"
+                );
+                return;
+            }
 
-        console.log(
-          "===== SAVED TASKS =====",
-          savedTasks
-        );
+            navigate(
+                "/focus"
+            );
 
-        if (!savedTasks.length) {
-          throw new Error(
-            "Timetable was not saved correctly."
-          );
+            return;
         }
 
-        setBlocks(savedTasks);
+        /*
+         * SECOND:
+         * If this is a saved timetable,
+         * find the next pending task.
+         */
+        if (
+            blocks.length > 0 &&
+            blocks.every(
+                task => Boolean(task?._id)
+            )
+        ) {
+
+            const firstTask =
+                getFirstStartableTask(
+                    blocks
+                );
+
+            if (!firstTask) {
+
+                toast.message(
+                    "All tasks in today's timetable are already completed or ended."
+                );
+
+                return;
+            }
+
+            await startFocusForTask(
+                firstTask
+            );
+
+            return;
+        }
+
+        /*
+         * THIRD:
+         * This is a newly generated timetable.
+         */
+        const response =
+            await saveSchedule({
+                tasks: blocks
+            });
 
         sessionStorage.removeItem(
-          "pendingSchedule"
+            getScopedStorageKey("pendingSchedule")
         );
 
-        setHasPendingSchedule(false);
+        const savedTasks =
+            response.tasks || [];
+
+        setBlocks(
+            savedTasks
+        );
 
         const firstTask =
-          getFirstStartableTask(
-            savedTasks
-          );
+            getFirstStartableTask(
+                savedTasks
+            );
 
         if (!firstTask) {
-          throw new Error(
-            "No pending task is available to start."
-          );
+
+            toast.error(
+                "No pending task was created."
+            );
+
+            return;
         }
 
-        toast.success(
-          "Timetable saved."
-        );
-
         await startFocusForTask(
-          firstTask
+            firstTask
         );
-
-        return;
-      }
-
-      /*
-      * CASE 2:
-      * Timetable already came from MongoDB.
-      * DO NOT save/recreate it again.
-      */
-      const firstTask =
-        getFirstStartableTask(
-          blocks
-        );
-
-      if (!firstTask) {
-        toast.error(
-          "No pending task is available to start."
-        );
-        return;
-      }
-
-      await startFocusForTask(
-        firstTask
-      );
 
     } catch (error) {
 
-      console.error(
-        "Start focus failed:",
-        error
-      );
+        console.error(
+            "Start focus failed:",
+            error
+        );
 
-      toast.error(
-        error?.response?.data?.error?.message ||
-        error?.response?.data?.message ||
-        error.message ||
-        "Unable to start focus mode."
-      );
+        if (
+            error?.response?.status ===
+            409
+        ) {
+
+            setActiveConflict(
+                error.response.data.session
+            );
+
+            setPendingStartTask(
+                getFirstStartableTask(
+                    blocks
+                )
+            );
+
+            return;
+        }
+
+        toast.error(
+            error?.response?.data?.error?.message ||
+            error?.response?.data?.message ||
+            error.message ||
+            "Unable to start focus mode."
+        );
 
     } finally {
-      setIsSaving(false);
+
+        setIsSaving(false);
     }
   };
 
   const handleResumeExisting = () => {
     setActiveConflict(null);
-    setPendingStartTask(null);
     navigate("/focus");
   };
 
   const handleCancelConflict = () => {
     setActiveConflict(null);
-    setPendingStartTask(null);
   };
 
   const handleEndPreviousAndStart = async () => {
-    if (!activeConflict?._id || !pendingStartTask) return;
+    if (!activeConflict?._id) return;
 
     setIsResolvingConflict(true);
 
     try {
       await failSession(activeConflict._id);
       setActiveConflict(null);
-      await startFocusForTask(pendingStartTask);
+      await startFocusForTask(
+        pendingStartTask ||
+        getFirstStartableTask(blocks)
+      );
     } catch (error) {
       toast.error(
         error?.response?.data?.error?.message ||
@@ -286,10 +311,36 @@ export function Timetable() {
           <h2 className="text-2xl font-light tracking-tight">Today's Timetable</h2>
           <p className="text-neutral-500 text-sm mt-1">Optimized for maximum retention and deep work.</p>
         </div>
-        <Button variant="primary" size="lg" className="shadow-lg shadow-blue-500/20 px-8" onClick={handleSaveAndStart} disabled={!blocks.length || isSaving}>
-          <Play className="w-5 h-5 mr-2" fill="currentColor" />
-          Start Focus
-        </Button>
+        <div className="flex items-center gap-3">
+          <div className="bg-white/80 dark:bg-neutral-900/80 p-1 rounded-full border border-neutral-200 dark:border-neutral-800 flex items-center shadow-sm">
+            <button
+              type="button"
+              onClick={() => setSelectedMode("gentle")}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                selectedMode === "gentle"
+                  ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 shadow-sm"
+                  : "text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
+              }`}
+            >
+              Gentle
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedMode("strict")}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                selectedMode === "strict"
+                  ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 shadow-sm"
+                  : "text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
+              }`}
+            >
+              Strict
+            </button>
+          </div>
+          <Button variant="primary" size="lg" className="shadow-lg shadow-blue-500/20 px-8" onClick={handleSaveAndStart} disabled={!blocks.length || isSaving}>
+            <Play className="w-5 h-5 mr-2" fill="currentColor" />
+            Start Focus
+          </Button>
+        </div>
       </header>
 
       {/* Main Content */}
@@ -318,6 +369,14 @@ export function Timetable() {
           
           {blocks.map((block, idx) => {
             const blockType = block.type === "INELASTIC" ? "fixed" : "focus";
+            const statusLabel =
+                block.status === "completed"
+                    ? "Completed"
+                    : block.status === "skipped"
+                    ? "Ended"
+                    : block.status === "in_progress"
+                    ? "In Progress"
+                    : "Pending";
             const startTime = block.startTime || block.fixedStartTime;
             const displayTime = startTime
               ? new Date(startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -364,6 +423,19 @@ export function Timetable() {
                       'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-400'
                     }`}>
                       {blockType}
+                    </span>
+                    <span
+                        className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${
+                            block.status === "completed"
+                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                : block.status === "skipped"
+                                ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                                : block.status === "in_progress"
+                                ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
+                                : "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-400"
+                        }`}
+                    >
+                        {statusLabel}
                     </span>
                   </div>
                 </div>

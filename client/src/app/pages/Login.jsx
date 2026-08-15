@@ -32,7 +32,7 @@ export function Login() {
 
         const setupCompleted = response?.setupCompleted;
         const nextPath = setupCompleted === undefined ? "/setup" : setupCompleted ? "/dashboard" : "/setup";
-        navigate(nextPath);
+        navigate(nextPath, { replace: true });
     } catch (error) {
         toast.error(getAuthErrorMessage(error));
     } finally {

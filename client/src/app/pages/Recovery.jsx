@@ -5,6 +5,7 @@ import { ArrowRight, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { getRecoverySummary, recoverSchedule, skipAndResume } from "../services/recoveryService";
+import { completeSession, resumeSession } from "../services/sessionService";
 
 function formatMinutes(minutes) {
   const safeMinutes = Math.max(0, Number(minutes || 0));
@@ -25,7 +26,7 @@ function formatMinutes(minutes) {
 export function Recovery() {
   const navigate = useNavigate();
   const [isRecovering, setIsRecovering] = useState(false);
-  const [step, setStep] = useState(2);
+  const [step, setStep] = useState(1);
   const [extraMinutes, setExtraMinutes] = useState(0);
   const [recovery, setRecovery] = useState({
     originalPlannedMinutes: 0,
@@ -68,6 +69,40 @@ export function Recovery() {
     }
   };
 
+  const handleCompleted = async () => {
+    setIsRecovering(true);
+
+    try {
+      // Get the current active session
+      const sessionResponse = await resumeSession();
+      if (!sessionResponse?.session) {
+        toast.error("No active session found.");
+        setIsRecovering(false);
+        return;
+      }
+
+      // Complete the session using existing API
+      const result = await completeSession(sessionResponse.session._id);
+
+      if (result?.nextSession && result?.nextTask) {
+        // More tasks to do
+        navigate("/focus");
+        return;
+      }
+
+      // All tasks completed
+      toast.success("Task completed successfully.");
+      navigate("/dashboard", {
+        state: { refreshSchedule: true }
+      });
+    } catch (error) {
+      toast.error("Unable to complete the session.");
+      console.error("Complete session error:", error);
+    } finally {
+      setIsRecovering(false);
+    }
+  };
+
   const handleOpenRegenerateView = () => {
     setStep(2);
   };
@@ -83,7 +118,7 @@ export function Recovery() {
 
       setRecovery(result);
       toast.success("Schedule regenerated successfully.");
-      navigate("/dashboard", {
+      navigate("/timetable", {
         state: {
           refreshSchedule: true
         }
@@ -115,6 +150,18 @@ export function Recovery() {
             It looks like you didn't check in. Life happens. How would you like to handle the rest of your schedule?
           </p>
           <div className="space-y-3">
+            <button
+              onClick={handleCompleted}
+              disabled={isRecovering}
+              className="w-full p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/10 hover:border-blue-500 dark:hover:border-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-all flex items-center justify-between group"
+            >
+              <div className="text-left">
+                <div className="font-medium text-sm">{isRecovering ? "Completing..." : "Completed"}</div>
+                <div className="text-xs text-neutral-500">Mark task as done</div>
+              </div>
+              <ArrowRight className="w-4 h-4 text-blue-500 group-hover:text-blue-600" />
+            </button>
+
             <button
               onClick={handleOpenRegenerateView}
               disabled={isRecovering}

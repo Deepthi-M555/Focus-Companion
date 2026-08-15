@@ -4,46 +4,10 @@ import { getAnalytics } from "../services/analyticsService";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from "recharts";
 import { Clock, Target, Calendar, Zap, AlertTriangle, Brain } from "lucide-react";
 
-const EVENT_LABELS = {
-  SESSION_START: "Focus Started",
-  CHECK_IN_TRIGGERED: "Voice Check-In",
-  CHECK_IN: "Voice Response",
-  SESSION_COMPLETED: "Focus Completed",
-  SESSION_FAILED: "Focus Ended",
-  RECOVERY_STARTED: "Recovery Started"
-};
-
-function formatTimelineTime(value) {
-  const date = new Date(value);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  const eventDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const time = date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit"
-  });
-
-  if (eventDay.getTime() === today.getTime()) {
-    return `Today ${time}`;
-  }
-
-  if (eventDay.getTime() === yesterday.getTime()) {
-    return `Yesterday ${time}`;
-  }
-
-  return `${date.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short"
-  })} ${time}`;
-}
-
 export function Analytics() {
   const [stats, setStats] = useState({});
   const [weeklyData, setWeeklyData] = useState([]);
   const [trendData, setTrendData] = useState([]);
-  const [timeline, setTimeline] = useState([]);
   const [insight, setInsight] = useState("");
   const [productiveTime, setProductiveTime] = useState("");
   const [averageSession, setAverageSession] = useState("");
@@ -57,12 +21,6 @@ export function Analytics() {
         setStats(data.stats);
         setWeeklyData(data.weeklyData);
         setTrendData(data.trendData);
-        setTimeline(
-          (data.timeline || [])
-            .slice()
-            .sort((a, b) => new Date(b.time) - new Date(a.time))
-            .slice(0, 10)
-        );
         setInsight(data.insight);
         setProductiveTime(data.productiveTime);
         setAverageSession(data.averageSession);
@@ -102,26 +60,21 @@ export function Analytics() {
         
         {/* Header */}
         <div>
-          <h2 className="text-3xl font-light tracking-tight mb-2">Behavioral Insights</h2>
+          <h2 className="text-3xl font-light tracking-tight mb-2">Focus Insights</h2>
           <p className="text-neutral-500">Understand your focus patterns and productivity trends.</p>
         </div>
 
-        {/* AI Insight Banner */}
-        <motion.div 
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="p-6 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-2xl flex gap-4 items-start"
-        >
+        <div className="p-6 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-2xl flex gap-4 items-start">
           <div className="p-3 bg-blue-100 dark:bg-blue-900/40 rounded-xl">
             <Brain className="w-6 h-6 text-blue-600 dark:text-blue-400" />
           </div>
           <div>
-            <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-1">AI Behavioral Insight</h4>
+            <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-1">Focus Summary</h4>
             <p className="text-blue-900/80 dark:text-blue-200/80 text-[15px] leading-relaxed">
               {insight}
             </p>
           </div>
-        </motion.div>
+        </div>
 
         {/* Top Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -197,26 +150,6 @@ export function Analytics() {
             <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">
               <Target className="w-5 h-5 text-emerald-500" />
             </div>
-          </div>
-        </div>
-
-        <div className="p-5 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl">
-          <h3 className="text-lg font-medium mb-4">Session Timeline</h3>
-          <div className="space-y-2 max-h-72 overflow-y-auto">
-            {timeline.length === 0 && (
-              <p className="text-sm text-neutral-500">No session activity yet.</p>
-            )}
-            {timeline.map(event => (
-              <div
-                key={event.id}
-                className="flex justify-between items-center gap-4 border-b border-neutral-200 dark:border-neutral-800 pb-2 text-sm"
-              >
-                <span>{EVENT_LABELS[event.type] || "Focus Activity"}</span>
-                <span className="text-xs text-neutral-500 whitespace-nowrap">
-                  {formatTimelineTime(event.time)}
-                </span>
-              </div>
-            ))}
           </div>
         </div>
 

@@ -2,14 +2,30 @@ import { useState, useEffect, useRef } from "react";
 import { Play, Pause, Maximize2, X } from "lucide-react";
 import { motion } from "motion/react";
 import {requestMicrophonePermission} from "../services/microphoneService";
-import socket from "../services/socketService";
+import socket, { connectSocket } from "../services/socketService";
 import {VOICE_CONFIG} from "../config/voiceConfig";
 import voiceSessionService from "../services/voiceSessionService";
 
 import VoiceRecorder from "../services/voiceRecorder";
 import {uploadVoice} from "../services/voiceUploadService";
 import ttsService from "../services/ttsService";
-import { VoiceStates } from "../constants/voiceStates";
+import {
+    resumeSession,
+    pauseSession,
+    resumePausedSession
+} from "../services/sessionService";
+
+const VoiceStates = {
+  IDLE: "idle",
+  SPEAKING: "speaking",
+  LISTENING: "listening",
+  PROCESSING: "processing",
+  CLOSING: "closing",
+  COMPLETED: "completed",
+  SNOOZED: "snoozed",
+  RECOVERY: "recovery",
+  ERROR: "error"
+};
 
 // This simulates the always-on-top frameless Electron window
 export function Overlay() {
@@ -25,6 +41,12 @@ export function Overlay() {
   transcript,
   setTranscript
   ]=useState("");
+
+  const [sessionId, setSessionId] =
+    useState(null);
+
+  const [plannedDuration, setPlannedDuration] =
+    useState(0);
 
   const recorder=
   useRef(new VoiceRecorder());
@@ -84,11 +106,13 @@ export function Overlay() {
   );
 
   socket.emit(
-  "voice-response",
-  {
-  sessionId:voiceSessionService.getSession(),
-  transcript:result.transcript
-  }
+    "voice-response",
+    {
+        sessionId:
+            data?.sessionId,
+        transcript:
+            result.transcript
+    }
   );
 
   setTimeout(()=>{
@@ -119,60 +143,119 @@ export function Overlay() {
 
   };
 
-  useEffect(()=>{
-    
-    socket.on(
-    "show-check-in",
-    (data)=>{
-    startVoiceCheckIn(data);
-    }
-    );
-    socket.on(
-    "focus:continue",
-    ()=>{
-    setVoiceState(
-    VoiceStates.CLOSING
-    );
-    }
-    );
+  useEffect(() => {
+    connectSocket();
 
-    socket.on(
-    "focus:complete",
-    ()=>{
-    setVoiceState(
-    VoiceStates.COMPLETED
-    );
-    }
-    );
-
-    socket.on(
-    "focus:snooze",
-    ()=>{
-    setVoiceState(
-    VoiceStates.SNOOZED
-    );
-    }
-    );
-
-    socket.on(
-    "focus:recovery",
-    ()=>{
-    setVoiceState(
-    VoiceStates.RECOVERY
-    );
-    }
-    );
-
-    return()=>{
-
-    socket.off("show-check-in");
-    socket.off("focus:continue");
-    socket.off("focus:complete");
-    socket.off("focus:snooze");
-    socket.off("focus:recovery");
-
+    const handleElectronCheckIn = (data) => {
+        startVoiceCheckIn(data);
     };
-  },[]);
+
+    const removeElectronListener =
+        window.electronAPI?.onCheckInRequired?.(
+            handleElectronCheckIn
+        );
+
+    socket.on(
+        "focus:continue",
+        () => {
+            setVoiceState(
+                VoiceStates.CLOSING
+            );
+        }
+    );
+
+    socket.on(
+        "focus:complete",
+        () => {
+            setVoiceState(
+                VoiceStates.COMPLETED
+            );
+
+            window.electronAPI?.hideOverlay?.();
+        }
+    );
+    socket.on(
+        "focus:snoozed",
+        () => {
+            setVoiceState(
+                VoiceStates.SNOOZED
+            );
+
+            window.electronAPI?.hideOverlay?.();
+        }
+    );
+
+    socket.on(
+        "focus:recovery",
+        () => {
+            setVoiceState(
+                VoiceStates.RECOVERY
+            );
+
+            window.electronAPI?.hideOverlay?.();
+        }
+    );
+
+    return () => {
+        removeElectronListener?.();
+
+        socket.off("focus:continue");
+        socket.off("focus:complete");
+        socket.off("focus:snoozed");
+        socket.off("focus:recovery");
+    };
+  }, []);
+
+  useEffect(() => {
+    async function loadSession() {
+        try {
+            const response =
+                await resumeSession();
+
+            if (!response?.session) {
+                return;
+            }
+
+            const session =
+                response.session;
+
+            setSessionId(session._id);
+            voiceSessionService.setSession(session._id);
+
+            socket.emit(
+                "join_focus_session",
+                session._id
+            );
+
+            setIsPaused(
+                session.status === "paused"
+            );
+
+            setPlannedDuration(
+                Number(session.plannedDuration || 0) * 60
+            );
+
+            setTimeLeft(
+                Math.max(
+                    0,
+                    Math.round(
+                        Number(
+                            session.remainingDuration ??
+                            session.plannedDuration ??
+                            0
+                        ) * 60
+                    )
+                )
+            );
+        } catch (error) {
+            console.error(
+                "Unable to load overlay session:",
+                error
+            );
+        }
+    }
+    void loadSession();
+  }, []);
 
   useEffect(() => {
     // Add a class to body to make it look like a transparent widget
@@ -199,9 +282,10 @@ export function Overlay() {
     const s = seconds % 60;
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
-
-  const totalDuration=45*60;
-  const progress=((totalDuration-timeLeft)/totalDuration)*100;
+  const progress =
+    plannedDuration > 0
+        ? ((plannedDuration - timeLeft) / plannedDuration) * 100
+        : 0;
   
   return (
     <div className="h-screen w-screen flex items-center justify-center p-4 selection:bg-blue-500/30">
@@ -235,7 +319,29 @@ export function Overlay() {
         </p>
 
         <p className="text-xs text-blue-500 mt-1">
-        {voiceState}
+            {voiceState === VoiceStates.SPEAKING &&
+                "FYNIX is speaking..."}
+
+            {voiceState === VoiceStates.LISTENING &&
+                "Listening..."}
+
+            {voiceState === VoiceStates.PROCESSING &&
+                "Transcribing your response..."}
+
+            {voiceState === VoiceStates.CLOSING &&
+                "Processing..."}
+
+            {voiceState === VoiceStates.COMPLETED &&
+                "Completed"}
+
+            {voiceState === VoiceStates.SNOOZED &&
+                "Snoozed"}
+
+            {voiceState === VoiceStates.RECOVERY &&
+                "Recovery required"}
+
+            {voiceState === VoiceStates.ERROR &&
+                "Voice check-in unavailable."}
         </p>
 
         {transcript&&(
@@ -248,7 +354,58 @@ export function Overlay() {
         {/* Controls */}
         <div className="flex items-center gap-1" style={{ WebkitAppRegion: "no-drag" }}>
           <button 
-            onClick={() => setIsPaused(!isPaused)}
+            onClick={async () => {
+                if (!sessionId) {
+                    return;
+                }
+
+                try {
+                    if (isPaused) {
+                        const response =
+                            await resumePausedSession(
+                                sessionId
+                            );
+
+                        setIsPaused(false);
+
+                        setTimeLeft(
+                            Math.max(
+                                0,
+                                Math.round(
+                                    Number(
+                                        response.session.remainingDuration ||
+                                        0
+                                    ) * 60
+                                )
+                            )
+                        );
+                    } else {
+                        const response =
+                            await pauseSession(
+                                sessionId
+                            );
+
+                        setIsPaused(true);
+
+                        setTimeLeft(
+                            Math.max(
+                                0,
+                                Math.round(
+                                    Number(
+                                        response.session.remainingDuration ||
+                                        0
+                                    ) * 60
+                                )
+                            )
+                        );
+                    }
+                } catch (error) {
+                    console.error(
+                        "Unable to update overlay session:",
+                        error
+                    );
+                }
+            }}
             className="p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors text-neutral-600 dark:text-neutral-400"
           >
             {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}

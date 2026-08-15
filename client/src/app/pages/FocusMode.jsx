@@ -4,13 +4,14 @@ import { Play, Pause, Square, Mic, Shield, ShieldAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button.jsx";
 import { toast } from "sonner";
-import {getSchedule} from "../services/scheduleService";
+import { getSettings } from "../services/settingsService";
 
 import {
     failSession,
     resumeSession,
     pauseSession,
-    resumePausedSession
+    resumePausedSession,
+    completeSession
 } from "../services/sessionService";
 
 import socket, {connectSocket} from "../services/socketService";
@@ -19,6 +20,8 @@ import voiceSessionService from "../services/voiceSessionService";
 import {
   requestMicrophonePermission
 } from "../services/microphoneService";
+
+import { loadActiveSchedule } from "../services/taskService";
 
 import VoiceRecorder from "../services/voiceRecorder";
 
@@ -32,6 +35,35 @@ import {
   VOICE_CONFIG
 } from "../config/voiceConfig";
 
+const VOICE_FAILURE_MESSAGES = {
+  MICROPHONE_DISABLED:
+    "Microphone is disabled for this check-in.",
+  MICROPHONE_PERMISSION_DENIED:
+    "Microphone permission was denied.",
+  MICROPHONE_UNAVAILABLE:
+    "Microphone capture is unavailable.",
+  MICROPHONE_CAPTURE_FAILED:
+    "Microphone capture failed.",
+  MEDIA_RECORDER_UNAVAILABLE:
+    "Browser recording support is unavailable.",
+  MEDIA_RECORDER_FAILED:
+    "Audio recording failed.",
+  VOICE_SERVICE_UNAVAILABLE:
+    "Voice service is unavailable.",
+  VOICE_UPLOAD_FAILED:
+    "Voice upload failed.",
+  VOICE_NETWORK_ERROR:
+    "Voice network request failed."
+};
+
+function getVoiceFailureMessage(error) {
+  return (
+    VOICE_FAILURE_MESSAGES[error?.code] ||
+    error?.message ||
+    "Voice check-in failed."
+  );
+}
+
 export function FocusMode() {
   const navigate = useNavigate();
   const [mode, setMode] = useState("gentle");
@@ -41,102 +73,175 @@ export function FocusMode() {
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [checkInStatus, setCheckInStatus] = useState("listening");
-  const [voiceTimeout, setVoiceTimeout] = useState(60);
-  const [currentTaskIndex, setCurrentTaskIndex] = useState(1);
-  const [totalTasks, setTotalTasks] = useState(1);
-  const [currentTaskTitle, setCurrentTaskTitle] = useState("No active task");
+  const [voiceTimeout, setVoiceTimeout] = useState(null);
+  const [currentTaskTitle, setCurrentTaskTitle] = useState("");
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [showEndSessionConfirm, setShowEndSessionConfirm] = useState(false);
+
 
   const [transcript, setTranscript] = useState("");
   const recorder = useRef(new VoiceRecorder());
+  const manualEndInFlightRef = useRef(false);
+  const finalNavigationRef = useRef(false);
+  const appliedSessionIdRef = useRef(null);
   const modeRef = useRef("gentle");
   useEffect(() => {
     modeRef.current = mode;
   }, [mode]);
 
   const startVoiceCheckIn =
-  async (data) => {
-    try {
-      setTranscript("")
-      setCheckInStatus(
-        "speaking"
-      );
-      const allowed =
-        await requestMicrophonePermission();
-      if (!allowed) {
-        setCheckInStatus(
-          "error"
-        );
-        toast.error(
-          "Microphone permission is required for voice check-in."
-        );
+  async (
+      data,
+      attempt = 1
+  ) => {
 
-        return;
-      }
-      const message =
-  modeRef.current === "strict"
-    ? "Time's up. Tell me clearly. Did you finish the task or not?"
-    : "Your focus session is complete. Did you finish the task?";
-      await ttsService.speak(
-        message
-      );
-      setCheckInStatus(
-        "listening"
-      );
+      try {
 
-      await recorder.current.start();
-      setTimeout(
-        async () => {
-          try {
+          setTranscript("");
 
-            const blob =
-              await recorder.current.stop();
-            setCheckInStatus(
-              "processing"
-            );
-            const result =
-              await uploadVoice(blob);
-            const spokenText =
-              result?.transcript?.trim();
-            if (!spokenText) {
+          setCheckInStatus(
+              "speaking"
+          );
+
+          const allowed =
+              await requestMicrophonePermission();
+
+          if (!allowed) {
+              const error =
+                  new Error(
+                      "Microphone permission is required for voice check-in."
+                  );
+              error.code = "MICROPHONE_DISABLED";
+
               setCheckInStatus(
-                "listening"
+                  "error"
               );
+
+              console.warn(
+                  "Voice check-in failed:",
+                  error.code,
+                  error.message
+              );
+
+              toast.error(
+                  getVoiceFailureMessage(error)
+              );
+
               return;
-            }
-            setTranscript(
+          }
+
+          const message =
+              modeRef.current === "strict"
+                  ? "Time's up. Tell me clearly. Did you finish the task or not?"
+                  : "Your focus session is complete. Did you finish the task?";
+
+          await ttsService.speak(
+              message
+          );
+
+          setCheckInStatus(
+              "listening"
+          );
+
+          await recorder.current.start();
+
+          await new Promise(
+              resolve =>
+                  setTimeout(
+                      resolve,
+                      VOICE_CONFIG.RECORDING_DURATION_MS
+                  )
+          );
+
+          const blob =
+              await recorder.current.stop();
+
+          if (
+              !blob ||
+              blob.size === 0
+          ) {
+              throw new Error(
+                  "No voice recording was captured."
+              );
+          }
+
+          setCheckInStatus(
+              "processing"
+          );
+
+          const result =
+              await uploadVoice(
+                  blob
+              );
+
+          const spokenText =
+              result?.transcript?.trim();
+
+          if (!spokenText) {
+
+              throw new Error(
+                  "No speech was detected."
+              );
+          }
+
+          setTranscript(
               spokenText
-            );
-            socket.emit(
+          );
+
+          socket.emit(
               "voice-response",
               {
-                sessionId:
-                  data?.sessionId ||
-                  sessionId,
-                transcript:
-                  spokenText
+                  sessionId:
+                      data?.sessionId ||
+                      sessionId,
+
+                  transcript:
+                      spokenText
               }
-            );
-          } catch (error) {
-            console.error(
-              "Voice processing failed:",
+          );
+
+      } catch (error) {
+
+          console.error(
+              `Voice check-in attempt ${attempt} failed:`,
+              error?.code || "VOICE_CHECK_IN_FAILED",
               error
-            );
-            setCheckInStatus(
-              "error"
-            );
+          );
+
+          if (
+              attempt <
+              VOICE_CONFIG.MAX_RETRY_COUNT
+          ) {
+
+              setCheckInStatus(
+                  "listening"
+              );
+
+              toast.message(
+                  "I couldn't capture that. Listening again..."
+              );
+
+              setTimeout(
+                  () => {
+                      startVoiceCheckIn(
+                          data,
+                          attempt + 1
+                      );
+                  },
+                  1000
+              );
+
+              return;
           }
-        },
-        VOICE_CONFIG.RECORDING_DURATION_MS
-      );
-    } catch (error) {
-      console.error(
-        "Voice check-in failed:",
-        error
-      );
-      setCheckInStatus(
-        "error"
-      );
-    }
+
+          setCheckInStatus(
+              "error"
+          );
+
+          toast.error(
+              `${getVoiceFailureMessage(error)} Manual completion and End Session are still available.`
+          );
+      }
   };
 
   // Formatting time
@@ -146,21 +251,6 @@ export function FocusMode() {
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
-  const syncTaskProgressFromSchedule = (scheduleItems = []) => {
-    const todaysTasks = Array.isArray(scheduleItems)
-      ? scheduleItems.filter(task => task.status !== "completed")
-      : [];
-
-    const firstTask = todaysTasks.find(task => task.status === "pending") || todaysTasks[0] || null;
-    const taskIndex = firstTask
-      ? todaysTasks.findIndex(task => (task._id || task.id || task.taskId) === (firstTask._id || firstTask.id || firstTask.taskId)) + 1
-      : 1;
-    const taskTotal = todaysTasks.length || 1;
-    setCurrentTaskIndex(taskIndex);
-    setTotalTasks(taskTotal);
-
-    return { firstTask, taskIndex, taskTotal };
-  };
 
   const handlePause = async () => {
 
@@ -224,14 +314,118 @@ console.log(
 
   const handleEndSession = async () => {
     if (!sessionId) return;
+    setShowEndSessionConfirm(true);
+  };
+
+  const confirmEndSession = async () => {
+    if (!sessionId) return;
+
+    manualEndInFlightRef.current = true;
+    setShowEndSessionConfirm(false);
+
     try {
       await failSession(sessionId);
+
+      const schedule = await loadActiveSchedule();
+      const hasRemainingTasks =
+        Array.isArray(schedule?.schedule) &&
+        schedule.schedule.some(task =>
+          !task.completed &&
+          ["pending", "in_progress"].includes(task.status)
+        );
+
+      setShowCheckIn(false);
+      setSessionId(null);
+      voiceSessionService.clearSession();
       toast.success("Focus session ended.");
-// Wait for socket.
-// Don't navigate here.
+      finalNavigationRef.current = true;
+      navigate(hasRemainingTasks ? "/timetable" : "/dashboard", {
+        state: { refreshSchedule: true },
+        replace: true
+      });
+    } catch (error) {
+      console.error("Manual end session failed:", error);
+      toast.error("Unable to end the focus session.");
+    } finally {
+      manualEndInFlightRef.current = false;
+    }
+  };
+
+  const cancelEndSession = () => {
+    setShowEndSessionConfirm(false);
+  };
+
+  const handleManualComplete = async () => {
+
+    if (!sessionId || isCompleting) {
+        return;
+    }
+
+    try {
+        setIsCompleting(true);
+
+        setCheckInStatus(
+            "processing"
+        );
+
+        const result =
+            await completeSession(
+                sessionId
+            );
+
+        if (
+            result?.nextSession &&
+            result?.nextTask
+        ) {
+
+            applyNextSession(
+                result
+            );
+
+            return;
+        }
+
+        setShowCheckIn(false);
+
+        voiceSessionService.clearSession();
+
+        if (finalNavigationRef.current) {
+            return;
+        }
+
+        toast.success(
+            "Task completed. Today's timetable is complete."
+        );
+
+        finalNavigationRef.current = true;
+        navigate(
+            "/dashboard",
+            {
+                state: {
+                    refreshSchedule: true
+                }
+            }
+        );
 
     } catch (error) {
-      toast.error("Unable to end the focus session.");
+
+        console.error(
+            "Manual completion failed:",
+            error
+        );
+
+        setCheckInStatus(
+            "error"
+        );
+
+        toast.error(
+            error?.response?.data?.error?.message ||
+            error?.response?.data?.message ||
+            error.message ||
+            "Unable to complete the task."
+        );
+    } finally {
+        setIsCompleting(false);
     }
   };
 
@@ -244,84 +438,236 @@ console.log(
     }
   }, [isPaused, timeLeft]);
 
-  const getScheduleItems = async () => {
-    try {
-      const savedSchedule = await getSchedule();
-      return Array.isArray(savedSchedule.schedule) ? savedSchedule.schedule : [];
-    } catch (error) {
-      console.error("Schedule load failed", error);
-      return [];
-    }
-  };
-
   const getSessionTimeLeftSeconds = (session) => {
-
     if (!session) {
-      return 0;
+        return 0;
     }
 
     if (
-      session.status === "check_in_pending" ||
-      session.status === "snoozed" ||
-      session.status === "recovery" ||
-      session.status === "skipped" ||
-      session.status === "completed"
+        session.status === "check_in_pending" ||
+        session.status === "snoozed" ||
+        session.status === "recovery" ||
+        session.status === "skipped" ||
+        session.status === "completed"
     ) {
-      return 0;
+        return 0;
     }
 
     const remainingMinutes =
-      Number(
-        session.remainingDuration ??
-        session.plannedDuration ??
-        0
-      );
+        Number(
+            session.remainingDuration ??
+            session.plannedDuration ??
+            0
+        );
+
+    if (!Number.isFinite(remainingMinutes) || remainingMinutes <= 0) {
+        return 0;
+    }
+
+    if (
+        session.status === "active" &&
+        session.startedAt
+    ) {
+        const startedAt =
+            new Date(session.startedAt).getTime();
+
+        if (!Number.isNaN(startedAt)) {
+            const elapsedSeconds =
+                Math.max(
+                    0,
+                    Math.floor(
+                        (Date.now() - startedAt) / 1000
+                    )
+                );
+
+            return Math.max(
+                0,
+                Math.ceil(
+                    remainingMinutes * 60 -
+                    elapsedSeconds
+                )
+            );
+        }
+    }
 
     return Math.max(
-      0,
-      Math.round(
-        remainingMinutes * 60
-      )
+        0,
+        Math.round(
+            remainingMinutes * 60
+        )
     );
+  };
+
+  const applyNextSession = (data) => {
+    const nextSession =
+        data?.session ||
+        data?.nextSession;
+
+    const nextTask =
+        data?.task ||
+        data?.nextTask;
+
+    if (!nextSession || !nextTask) {
+        console.error(
+            "Invalid next session payload:",
+            data
+        );
+
+        return false;
+    }
+
+    if (
+        appliedSessionIdRef.current &&
+        appliedSessionIdRef.current === nextSession._id
+    ) {
+        return true;
+    }
+
+    appliedSessionIdRef.current =
+        nextSession._id;
+    finalNavigationRef.current = false;
+
+    setShowCheckIn(false);
+    setCheckInStatus("listening");
+    setTranscript("");
+
+    setSessionId(
+        nextSession._id
+    );
+
+    voiceSessionService.setSession(
+        nextSession._id
+    );
+
+    setCurrentTaskTitle(
+        nextTask.title ||
+        nextTask.name ||
+        "No active task"
+    );
+
+    setMode(
+        nextSession.mode ||
+        "gentle"
+    );
+
+    setIsPaused(
+        nextSession.status === "paused"
+    );
+
+    setVoiceTimeout(
+        nextSession.voiceResponseTimeout
+    );
+
+    setPlannedDuration(
+        Number(
+            nextSession.plannedDuration ||
+            0
+        ) * 60
+    );
+
+    setTimeLeft(
+        getSessionTimeLeftSeconds(
+            nextSession
+        )
+    );
+
+    socket.emit(
+        "join_focus_session",
+        nextSession._id
+    );
+
+    toast.success(
+        `Next task: ${
+            nextTask.title ||
+            nextTask.name ||
+            "Next task"
+        }`
+    );
+
+    return true;
   };
 
   useEffect(() => {
     async function beginSession() {
       try {
+        console.log("[FocusMode] beginSession() called on mount");
         const response = await resumeSession();
 
-        console.log("===== RESUME SESSION =====");
-        console.log(response.session);
+        console.log("[FocusMode] resumeSession response:", response);
+        console.log("[FocusMode] session object:", response?.session);
 
-        const scheduleItems = await getScheduleItems();
-        const taskProgress = syncTaskProgressFromSchedule(scheduleItems);
-
-        if (response.session) {
-          const activeTask = response.session.task;
-          const activeTaskTitle = activeTask?.title || activeTask?.name || "No active task";
-
-          const activeTaskId = activeTask?._id || activeTask?.id || activeTask?.taskId;
-          const indexFromSchedule = scheduleItems.findIndex(
-            (task) => (task._id || task.id || task.taskId) === activeTaskId
-          );
-          const activeIndex = indexFromSchedule >= 0 ? indexFromSchedule + 1 : 1;
-
-          setCurrentTaskIndex(activeIndex);
-          setTotalTasks(Math.max(scheduleItems.length || taskProgress.taskTotal, 1));
-          setCurrentTaskTitle(activeTaskTitle);
-          setSessionId(response.session._id);
-          setIsPaused(response.session.status === "paused");
-          setMode(response.session.mode ?? "gentle");
-
-          setPlannedDuration((response.session.plannedDuration ?? activeTask?.estimatedDuration ?? 0) * 60);
-          setTimeLeft(getSessionTimeLeftSeconds(response.session));
-          return;
+        if (!response?.session) {
+            console.warn("[FocusMode] No active session found - navigating to timetable");
+            toast.error("Start focus from your timetable.");
+            navigate("/timetable");
+            return;
         }
 
-        toast.error("Start focus from your timetable.");
-        navigate("/timetable");
+        console.log("[FocusMode] Found active session:", {
+          _id: response.session._id,
+          status: response.session.status,
+          plannedDuration: response.session.plannedDuration,
+          remainingDuration: response.session.remainingDuration,
+          startedAt: response.session.startedAt
+        });
+
+        if (response.session.status === "recovery") {
+            console.log("[FocusMode] Session status is recovery - navigating to recovery page");
+            navigate("/recovery");
+            return;
+        }
+
+        const activeTask = response.session.task;
+
+        const activeTaskTitle =
+            activeTask?.title ||
+            activeTask?.name ||
+            "No active task";
+
+        setCurrentTaskTitle(
+            activeTaskTitle
+        );
+
+        setSessionId(
+            response.session._id
+        );
+
+        setIsPaused(
+            response.session.status === "paused"
+        );
+
+        setMode(
+            response.session.mode ?? "gentle"
+        );
+
+        setVoiceTimeout(
+            response.session.voiceResponseTimeout
+        );
+
+        setPlannedDuration(
+            Number(
+                response.session.plannedDuration || 0
+            ) * 60
+        );
+
+        const timeLeftSeconds = getSessionTimeLeftSeconds(
+            response.session
+        );
+        
+        console.log("[FocusMode] Restored session with time left:", timeLeftSeconds, "seconds");
+        setTimeLeft(timeLeftSeconds);
+
+        // FIX 5: If session is already in check-in state, show check-in UI
+        // but don't restart voice recording - wait for socket event
+        if (response.session.status === "check_in_pending") {
+            console.log("[FocusMode] Session already in check-in state - showing check-in UI");
+            setShowCheckIn(true);
+            setCheckInStatus("listening");
+        }
+
       } catch (error) {
-        console.error("FocusMode error", error);
+        console.error("[FocusMode] ERROR in beginSession:", error);
+        console.error("[FocusMode] Error response:", error?.response?.data);
         toast.error(
           error?.response?.data?.error?.message || error.message || "Unable to load focus mode."
         );
@@ -378,48 +724,121 @@ console.log(
   },[sessionId]);
 
   useEffect(()=>{
-    const handleShowCheckIn =
-      async (data) => {
+    const handleShowCheckIn = async (data) => {
+    const settings = await getSettings().catch(() => ({}));
 
-        setShowCheckIn(true);
+    setShowCheckIn(true);
+    setVoiceTimeout(data.timeout);
 
-        setVoiceTimeout(
-          data.timeout ?? 60
+    if (
+        settings?.notificationsEnabled !== false &&
+        window.electronAPI?.notify
+    ) {
+        await window.electronAPI.notify({
+            title: "FYNIX Check-in",
+            body: "Your focus session is complete. Check in with FYNIX.",
+            silent: false
+        });
+    }
+    if (
+        settings?.overlayEnabled !== false &&
+        window.electronAPI?.showOverlay
+    ) {
+        await window.electronAPI.showOverlay({
+            ...data,
+            voiceEnabled: settings?.voiceEnabled !== false
+        });
+
+        return;
+    }
+
+    if (settings?.voiceEnabled !== false) {
+        await startVoiceCheckIn(data);
+    }
+  };
+
+    const handleFocusNextTask = (data) => {
+        applyNextSession(data);
+    };
+
+    const handleFocusComplete = () => {
+        if (finalNavigationRef.current) {
+            return;
+        }
+
+        finalNavigationRef.current = true;
+
+        console.log(
+            "FOCUS COMPLETE EVENT RECEIVED"
         );
 
-        await startVoiceCheckIn(data);
-      };
+        setShowCheckIn(false);
+
+        voiceSessionService.clearSession();
+
+        toast.success(
+            "Today's timetable is complete."
+        );
+
+        navigate(
+            "/dashboard",
+            {
+                state: {
+                    refreshSchedule: true
+                }
+            }
+        );
+    };
+
+    const handleFocusEnded = () => {
+        if (
+            manualEndInFlightRef.current ||
+            finalNavigationRef.current
+        ) {
+            return;
+        }
+
+        finalNavigationRef.current = true;
+
+        console.log(
+            "FOCUS SESSION ENDED"
+        );
+
+        setShowCheckIn(false);
+
+        voiceSessionService.clearSession();
+
+        toast.success(
+            "Session ended. The task was marked as ended."
+        );
+
+        navigate(
+            "/dashboard",
+            {
+                state: {
+                    refreshSchedule: true
+                }
+            }
+        );
+    };
 
     socket.on(
       "show-check-in",
       handleShowCheckIn
     );
 
-    socket.on("focus:complete", () => {
+    socket.on(
+        "focus:next-task",
+        handleFocusNextTask
+    );
 
-        console.log("FOCUS COMPLETE EVENT RECEIVED");
-
-        setShowCheckIn(false);
-
-        voiceSessionService.clearSession();
-
-        navigate("/dashboard");
-
-    });
+    socket.on(
+        "focus:complete",
+        handleFocusComplete
+    );
     socket.on(
       "focus:ended",
-      () => {
-
-        console.log(
-          "FOCUS SESSION ENDED"
-        );
-
-        setShowCheckIn(false);
-
-        voiceSessionService.clearSession();
-
-        navigate("/dashboard");
-      }
+      handleFocusEnded
     );
 
     socket.on(
@@ -510,20 +929,64 @@ console.log(
       }
     );
 
-    return()=>{
-        socket.off("show-check-in", handleShowCheckIn);
-        socket.off("focus:complete");
-        socket.off("focus:ended");
-        socket.off("focus:snoozed");
-        socket.off("focus:recovery");
-        socket.off("focus:clarify");
+    return () => {
+
+        socket.off(
+            "show-check-in",
+            handleShowCheckIn
+        );
+
+        socket.off(
+            "focus:next-task",
+            handleFocusNextTask
+        );
+
+        socket.off(
+            "focus:complete",
+            handleFocusComplete
+        );
+
+        socket.off(
+            "focus:ended",
+            handleFocusEnded
+        );
+
+        socket.off(
+            "focus:snoozed"
+        );
+
+        socket.off(
+            "focus:recovery"
+        );
+
+        socket.off(
+            "focus:clarify"
+        );
     };
   },[]);
 
+  // Show Electron overlay when check-in is ready
   const progress = plannedDuration > 0
     ? ((plannedDuration - timeLeft) / plannedDuration) * 100
     : 0;
   const strokeDashoffset = 283 - (283 * progress) / 100;
+  const canShowCompletionCheckIn = showCheckIn && timeLeft <= 0;
+
+  useEffect(() => {
+    if (
+        !canShowCompletionCheckIn &&
+        window.electronAPI
+    ) {
+        window.electronAPI
+            .hideOverlay()
+            .catch((error) => {
+                console.error(
+                    "[FocusMode] Failed to hide overlay:",
+                    error
+                );
+            });
+    }
+  }, [canShowCompletionCheckIn]);
 
   return (
     <div className="flex-1 flex flex-col h-full bg-white dark:bg-[#0a0a0a] relative overflow-hidden">
@@ -606,11 +1069,8 @@ console.log(
             }`}>
               {formatTime(timeLeft)}
             </div>
-            <span className="mt-3 px-3 py-1 bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 text-xs rounded-full font-medium">
-              Focus Block {currentTaskIndex} / {totalTasks}
-            </span>
             <span className="mt-2 text-sm font-medium text-neutral-700 dark:text-neutral-300">
-              {currentTaskTitle}
+              {currentTaskTitle|| "No active task"}
             </span>
           </div>
         </div>
@@ -649,7 +1109,7 @@ console.log(
 
       {/* VOICE CHECK-IN OVERLAY (FRAME 8) */}
       <AnimatePresence>
-        {showCheckIn && (
+        {canShowCompletionCheckIn && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -729,47 +1189,68 @@ console.log(
               )}
 
               <div className="flex gap-3">
-                <Button 
-                  className="flex-1" 
-                  variant="primary"
-                  onClick={async()=>{
-
-                    socket.emit(
-
-                      "voice-response",
-
-                      {
-
-                        sessionId,
-
-                        transcript: "I completed the task"
-
-                      }
-
-                    );
-
-                  }}
-
+                <Button
+                    className="flex-1"
+                    variant="primary"
+                    disabled={isCompleting}
+                    onClick={
+                        handleManualComplete
+                    }
                 >
-                  Completed
+                    {isCompleting ? "Completing..." : "Completed"}
+                </Button>
+                <Button
+                    className="flex-1"
+                    variant="outline"
+                    onClick={() => {
+                        console.log("[FocusMode] Need Help clicked - navigating to recovery");
+                        navigate("/recovery");
+                    }}
+                >
+                    Need Help
                 </Button>
               
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-              <button 
-                onClick={()=>{
-                    socket.emit(
-                      "voice-response",
-                      {
-                        sessionId,
-                        transcript:"I need help"
-                      }
-                    );
-                  }}
-                className="mt-6 text-sm text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 transition-colors"
-              >
-              I need help
-              </button>
+      {/* END SESSION CONFIRMATION DIALOG */}
+      <AnimatePresence>
+        {showEndSessionConfirm && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/30 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-8"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 10 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 10 }}
+              className="max-w-sm w-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl p-8 shadow-2xl text-center"
+            >
+              <h3 className="text-xl font-semibold mb-3">End Session?</h3>
+              <p className="text-neutral-500 mb-8">
+                Are you sure you want to end this focus session? This action cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={cancelEndSession}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                  onClick={confirmEndSession}
+                >
+                  End Session
+                </Button>
+              </div>
             </motion.div>
           </motion.div>
         )}

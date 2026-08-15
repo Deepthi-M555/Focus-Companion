@@ -142,10 +142,16 @@ export function Settings() {
             setNotificationsEnabled(data.notificationsEnabled?? true);
             setOverlayEnabled(data.overlayEnabled?? true);
             setStartupEnabled(data.startupEnabled?? false);
-            setVoiceResponseTimeout(String(data.voiceResponseTimeout ?? "60"));
-            setSnoozeDuration(String(data.snoozeDuration??"5"));
+            setVoiceResponseTimeout(
+                String(data.voiceResponseTimeout)
+            );
+
+            setSnoozeDuration(
+                String(data.snoozeDuration)
+            );
+
             setMaxSnoozes(
-                String(data.maxSnoozes ?? 3)
+                String(data.maxSnoozes)
             );
     
         } catch (error) {
@@ -397,27 +403,37 @@ export function Settings() {
               title="Microphone"
               description="Required for voice check-ins"
               status={permissions.microphone}
-              checked={permissions.microphone === "granted"}
-              disabled={permissions.microphone === "not_available"}
+              checked={micEnabled}
+              disabled={false}
               onCheckedChange={async (next) => {
                 if (!next) {
-                  toast.message("Microphone permission is managed by the operating system.");
-                  await syncPermissions();
-                  return;
+                    setMicEnabled(false);
+                    return;
                 }
 
                 try {
-                  const result = await window.electronAPI?.requestMicrophonePermission?.();
-                  if (result?.success) {
-                    toast.success("Microphone permission granted.");
-                  } else {
-                    toast.error(result?.error || "Microphone permission was not granted.");
-                  }
-                  await syncPermissions();
+                    const result =
+                        await window.electronAPI?.requestMicrophonePermission?.();
+
+                    if (result?.success) {
+                        setMicEnabled(true);
+                        toast.success("Microphone enabled.");
+                    } else {
+                        setMicEnabled(false);
+                        toast.error(
+                            result?.error ||
+                            "Microphone permission was not granted."
+                        );
+                    }
+
+                    await syncPermissions();
                 } catch {
-                  toast.error("Unable to request microphone permission.");
+                    setMicEnabled(false);
+                    toast.error(
+                        "Unable to request microphone permission."
+                    );
                 }
-              }}
+            }}
             />
 
             <PermissionRow
@@ -451,6 +467,15 @@ export function Settings() {
                   toast.error("Unable to request notification permission.");
                 }
               }}
+            />
+
+            <PermissionRow
+                icon={<Monitor className="w-4 h-4 text-purple-500" />}
+                title="Desktop Overlay"
+                description="Show the FYNIX desktop check-in overlay"
+                checked={overlayEnabled}
+                disabled={false}
+                onCheckedChange={setOverlayEnabled}
             />
 
             <PermissionRow
