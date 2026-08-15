@@ -1,12 +1,73 @@
+# Dependencies
 node_modules/
-package-lock.json
+**/node_modules/
 
+# Package lock files
+package-lock.json
 client/package-lock.json
 
+# Environment files
 .env
-dist/
+.env.*
+!.env.example
+**/.env
+**/.env.*
 
-.venv/
+# Build output
+dist/
+**/dist/
+build/
+**/build/
+
+# Electron
+release/
+out/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+
+# Archives / temporary project copies
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+
+# Python
 __pycache__/
+**/__pycache__/
+*.py[cod]
 *.pyc
+.pytest_cache/
+
+# Virtual environments
+.venv/
 voice-service/venv/
+voice-service/.venv/
+
+# Voice service Python generated files
+voice-service/__pycache__/
+voice-service/**/__pycache__/
+
+# Voice uploads / generated audio
+voice-service/uploads/
+server/uploads/
+
+# Temporary files
+*.tmp
+*.temp
+

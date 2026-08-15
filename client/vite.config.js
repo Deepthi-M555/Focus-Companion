@@ -18,6 +18,7 @@ function figmaAssetResolver() {
 }
 
 export default defineConfig({
+  base: "./",
   plugins: [figmaAssetResolver(), react(), tailwindcss()],
   server: {
     port: 5174,

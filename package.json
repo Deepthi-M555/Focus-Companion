@@ -3,9 +3,66 @@
   "version": "1.0.0",
   "description": "A full-stack desktop productivity application designed to help users stay focused, manage tasks, and improve productivity through structured scheduling and focus sessions.",
   "main": "electron/main.js",
+  "homepage": "./",
   "scripts": {
+    "dev": "npm run build:client && electron . --dev",
+    "build:client": "cd client && npm run build && cd ..",
+    "build:app": "npm run build:client && electron-builder",
+    "build:app:win": "npm run build:client && electron-builder --win",
+    "build:app:mac": "npm run build:client && electron-builder --mac",
+    "build:app:linux": "npm run build:client && electron-builder --linux",
     "electron": "electron .",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "build": {
+    "appId": "com.companion.app",
+    "productName": "FYNIX",
+    "directories": {
+      "buildResources": "assets",
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "client/dist/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Productivity"
+    }
   },
   "repository": {
     "type": "git",
@@ -17,8 +74,8 @@
   "bugs": {
     "url": "https://github.com/Deepthi-M555/Focus-Companion-/issues"
   },
-  "homepage": "https://github.com/Deepthi-M555/Focus-Companion-#readme",
   "devDependencies": {
-    "electron": "^42.1.0"
+    "electron": "^42.1.0",
+    "electron-builder": "^24.9.1"
   }
 }
