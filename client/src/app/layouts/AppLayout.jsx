@@ -16,9 +16,12 @@ import { useTheme } from "../theme.jsx";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "../components/ui/Collapsible.jsx";
 import { getAnalytics } from "../services/analyticsService";
 import { resumeSession } from "../services/sessionService";
-import { loadTodaySchedule } from "../services/taskService";
+import { loadActiveSchedule } from "../services/taskService";
 import { getCurrentUser } from "../services/userService";
 import { ProfileAvatar } from "../components/ProfileAvatar.jsx";
+import { removeToken, clearUserScopedClientState } from "../utils/token";
+import { disconnectSocket } from "../services/socketService";
+import voiceSessionService from "../services/voiceSessionService";
 
 export function AppLayout() {
   const { theme, toggleTheme } = useTheme();
@@ -31,7 +34,6 @@ export function AppLayout() {
     avatar: ""
   });
   const [contextSummary, setContextSummary] = useState({
-    plannedHours: 0,
     currentTask: "",
     focusIntegrity: 0,
     todayTasks: []
@@ -44,6 +46,14 @@ export function AppLayout() {
     { name: "Settings", path: "/settings", icon: Settings },
   ];
 
+  const handleLogout = () => {
+    removeToken();
+    clearUserScopedClientState();
+    voiceSessionService.clearSession();
+    disconnectSocket();
+    navigate("/login", { replace: true });
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -52,7 +62,7 @@ export function AppLayout() {
         const [user, activeSession, schedule] = await Promise.all([
           getCurrentUser(),
           resumeSession(),
-          loadTodaySchedule()
+          loadActiveSchedule()
         ]);
 
         if (cancelled) {
@@ -61,10 +71,6 @@ export function AppLayout() {
 
         const activeTask = activeSession?.session?.task;
         const todayTasks = schedule?.schedule || [];
-        const plannedMinutes = todayTasks.reduce(
-          (sum, task) => sum + Number(task.estimatedDuration || 0),
-          0
-        );
 
         setProfile({
           name: user.name || user.email || "User",
@@ -73,7 +79,6 @@ export function AppLayout() {
         });
         setContextSummary((prev) => ({
           ...prev,
-          plannedHours: Number((plannedMinutes / 60).toFixed(1)),
           currentTask: activeTask?.title || activeTask?.name || "",
           todayTasks
         }));
@@ -162,6 +167,13 @@ export function AppLayout() {
                 <span className="truncate text-xs text-neutral-500 leading-tight mt-1">{profile.email || "Active user"}</span>
               </div>
             </div>
+            <button
+              onClick={handleLogout}
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+              title="Logout"
+            >
+              <span className="text-sm font-medium">↪</span>
+            </button>
             <button 
               onClick={toggleTheme}
               className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
@@ -184,23 +196,6 @@ export function AppLayout() {
           
           <div className="space-y-4">
             <>
-                <Collapsible defaultOpen>
-                  <div className="rounded-2xl bg-white/60 dark:bg-neutral-900/40 backdrop-blur-xl border border-neutral-200/50 dark:border-neutral-800/50 shadow-sm transition-all hover:shadow-md overflow-hidden">
-                    <CollapsibleTrigger className="w-full p-4 flex items-center justify-between cursor-pointer hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <Clock className="w-5 h-5 text-blue-500" />
-                        <span className="font-medium text-sm">Planned Hours</span>
-                      </div>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="px-4 pb-4">
-                      <div className="flex items-end gap-2">
-                        <span className="text-3xl font-light tracking-tighter">{contextSummary.plannedHours}</span>
-                        <span className="text-neutral-500 mb-1 text-sm">hrs</span>
-                      </div>
-                    </CollapsibleContent>
-                  </div>
-                </Collapsible>
-
                 <Collapsible defaultOpen>
                   <div className="rounded-2xl bg-white/60 dark:bg-neutral-900/40 backdrop-blur-xl border border-neutral-200/50 dark:border-neutral-800/50 shadow-sm transition-all hover:shadow-md overflow-hidden">
                     <CollapsibleTrigger className="w-full p-4 flex items-center justify-between cursor-pointer hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30 transition-colors">

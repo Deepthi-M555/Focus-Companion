@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createBrowserRouter, createHashRouter, Navigate } from "react-router-dom";
 import { AuthLayout } from "./layouts/AuthLayout.jsx";
 import { AppLayout } from "./layouts/AppLayout.jsx";
 import { Login } from "./pages/Login.jsx";
@@ -15,7 +15,13 @@ import { ErrorPage } from "./pages/ErrorPage.jsx";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 
-export const router = createBrowserRouter([
+const createAppRouter =
+    typeof window !== "undefined" &&
+    window.location.protocol === "file:"
+        ? createHashRouter
+        : createBrowserRouter;
+
+export const router = createAppRouter([
   {
     path: "/",
     element: <Navigate to="/login" replace />,
