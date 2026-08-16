@@ -29,12 +29,23 @@ class VoiceRecorder {
             throw error;
         }
 
+        console.log("[VoiceRecorder] getUserMedia called");
+
         try {
             this.stream =
                 await navigator.mediaDevices.getUserMedia({
                     audio: true
                 });
+
+            console.log(
+                "[VoiceRecorder] stream obtained, tracks:",
+                this.stream.getTracks().length
+            );
         } catch (error) {
+            console.error(
+                "[VoiceRecorder] getUserMedia failed:",
+                error
+            );
             error.code =
                 error.name === "NotAllowedError"
                     ? "MICROPHONE_PERMISSION_DENIED"
@@ -57,12 +68,26 @@ class VoiceRecorder {
                     this.stream,
                     { mimeType }
                 );
+
+            console.log(
+                "[VoiceRecorder] MediaRecorder created with mimeType:",
+                mimeType
+            );
         } catch (error) {
+            console.error(
+                "[VoiceRecorder] MediaRecorder creation failed:",
+                error
+            );
             this.stream
                 ?.getTracks()
                 .forEach(
-                    track =>
-                        track.stop()
+                    track => {
+                        console.log(
+                            "[VoiceRecorder] stopping track:",
+                            track.kind
+                        );
+                        track.stop();
+                    }
                 );
             error.code = "MEDIA_RECORDER_FAILED";
             throw error;
@@ -70,6 +95,11 @@ class VoiceRecorder {
 
         this.mediaRecorder.ondataavailable =
             (event) => {
+
+                console.log(
+                    "[VoiceRecorder] dataavailable event, size:",
+                    event.data?.size
+                );
 
                 if (
                     event.data?.size > 0
@@ -81,6 +111,8 @@ class VoiceRecorder {
             };
 
         this.mediaRecorder.start();
+
+        console.log("[VoiceRecorder] start() called on MediaRecorder");
     }
 
     stop() {
@@ -88,13 +120,24 @@ class VoiceRecorder {
         return new Promise(
             (resolve, reject) => {
 
+                console.log("[VoiceRecorder] stop() called");
+
                 if (!this.mediaRecorder) {
+
+                    console.warn(
+                        "[VoiceRecorder] stop() called but no mediaRecorder; returning empty blob"
+                    );
 
                     this.stream
                         ?.getTracks()
                         .forEach(
-                            track =>
-                                track.stop()
+                            track => {
+                                console.log(
+                                    "[VoiceRecorder] stopping orphan track:",
+                                    track.kind
+                                );
+                                track.stop();
+                            }
                         );
 
                     this.stream = null;
@@ -122,11 +165,23 @@ class VoiceRecorder {
                                 }
                             );
 
+                        console.log(
+                            "[VoiceRecorder] onstop: blob created, size:",
+                            blob.size,
+                            ", chunks:",
+                            this.chunks.length
+                        );
+
                         this.stream
                             ?.getTracks()
                             .forEach(
-                                track =>
-                                    track.stop()
+                                track => {
+                                    console.log(
+                                        "[VoiceRecorder] stopping track in onstop:",
+                                        track.kind
+                                    );
+                                    track.stop();
+                                }
                             );
 
                         this.mediaRecorder = null;
@@ -139,11 +194,21 @@ class VoiceRecorder {
                 this.mediaRecorder.onerror =
                     (event) => {
 
+                        console.error(
+                            "[VoiceRecorder] onerror event:",
+                            event.error
+                        );
+
                         this.stream
                             ?.getTracks()
                             .forEach(
-                                track =>
-                                    track.stop()
+                                track => {
+                                    console.log(
+                                        "[VoiceRecorder] stopping track in onerror:",
+                                        track.kind
+                                    );
+                                    track.stop();
+                                }
                             );
 
                         this.mediaRecorder = null;
@@ -158,6 +223,7 @@ class VoiceRecorder {
                         );
                     };
 
+                console.log("[VoiceRecorder] calling stop() on mediaRecorder");
                 this.mediaRecorder.stop();
             }
         );

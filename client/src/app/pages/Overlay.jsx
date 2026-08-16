@@ -60,31 +60,55 @@ export function Overlay() {
 
       setVoiceState(VoiceStates.LISTENING);
 
+      console.log("[Overlay:MIC] getUserMedia called");
+
       await recorder.current.start();
 
-      setTimeout(async () => {
-        const blob = await recorder.current.stop();
+      console.log("[Overlay:MIC] MediaRecorder started");
 
-        setVoiceState(VoiceStates.PROCESSING);
+      await new Promise(
+        resolve =>
+          setTimeout(
+            resolve,
+            VOICE_CONFIG.RECORDING_DURATION_MS
+          )
+      );
 
-        try {
-          const result = await uploadVoice(blob);
+      console.log("[Overlay:MIC] recording duration complete, stopping recorder");
 
-          setTranscript(result.transcript);
+      const blob = await recorder.current.stop();
 
-          socket.emit("voice-response", {
-            sessionId: data?.sessionId,
-            transcript: result.transcript
-          });
+      console.log("[Overlay:MIC] recorder stopped, blob size:", blob?.size);
 
-          setTimeout(() => {
-            setVoiceState(VoiceStates.CLOSING);
-          }, VOICE_CONFIG.CLOSING_DELAY_MS);
-        } catch {
-          setVoiceState(VoiceStates.ERROR);
-          console.error("[Overlay] Upload voice failed");
-        }
-      }, VOICE_CONFIG.RECORDING_DURATION_MS);
+      if (!blob || blob.size === 0) {
+        setVoiceState(VoiceStates.ERROR);
+        console.error("[Overlay] Empty blob recorded");
+        return;
+      }
+
+      setVoiceState(VoiceStates.PROCESSING);
+
+      console.log("[Overlay:MIC] uploading voice blob");
+
+      try {
+        const result = await uploadVoice(blob);
+
+        console.log("[Overlay:MIC] upload response:", result);
+
+        setTranscript(result.transcript);
+
+        socket.emit("voice-response", {
+          sessionId: data?.sessionId,
+          transcript: result.transcript
+        });
+
+        setTimeout(() => {
+          setVoiceState(VoiceStates.CLOSING);
+        }, VOICE_CONFIG.CLOSING_DELAY_MS);
+      } catch (error) {
+        setVoiceState(VoiceStates.ERROR);
+        console.error("[Overlay] Upload voice failed:", error);
+      }
     } catch {
       setVoiceState(VoiceStates.ERROR);
       console.error("[Overlay] Voice check-in failed");
