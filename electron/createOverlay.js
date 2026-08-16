@@ -19,7 +19,7 @@ function createOverlay({
 
             transparent: true,
 
-            alwaysOnTop: false,
+            alwaysOnTop: true,
 
             skipTaskbar: true,
 
@@ -42,7 +42,10 @@ function createOverlay({
                     true,
 
                 sandbox:
-                    true
+                    true,
+
+                autoplayPolicy:
+                    "no-user-gesture-required"
 
             }
 

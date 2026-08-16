@@ -60,11 +60,6 @@ contextBridge.exposeInMainWorld(
                 options
             ),
 
-        notifyOverlayReady: () =>
-            ipcRenderer.send(
-                "overlay:renderer-ready"
-            ),
-
         onCheckInRequired:
             (callback) => {
 
@@ -89,7 +84,23 @@ contextBridge.exposeInMainWorld(
 
                 };
 
-            }
+            },
+
+        notifyOverlayReady: () =>
+            ipcRenderer.send(
+                "overlay:renderer-ready"
+            ),
+
+        speak: (text) =>
+            ipcRenderer.invoke(
+                "tts:speak",
+                text
+            ),
+
+        stopSpeaking: () =>
+            ipcRenderer.invoke(
+                "tts:stop"
+            )
 
     }
 );

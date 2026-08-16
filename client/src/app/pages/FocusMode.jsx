@@ -84,10 +84,21 @@ export function FocusMode() {
   const manualEndInFlightRef = useRef(false);
   const finalNavigationRef = useRef(false);
   const appliedSessionIdRef = useRef(null);
+  const checkInVoiceStartedRef = useRef(false);
   const modeRef = useRef("gentle");
   useEffect(() => {
     modeRef.current = mode;
   }, [mode]);
+
+  const startVoiceCheckInOnce = async (data) => {
+      if (checkInVoiceStartedRef.current) {
+        console.log("[FocusMode] Check-in voice already started; ignoring duplicate trigger");
+        return;
+      }
+
+      checkInVoiceStartedRef.current = true;
+      await startVoiceCheckIn(data);
+    };
 
   const startVoiceCheckIn =
   async (
@@ -98,10 +109,32 @@ export function FocusMode() {
       try {
 
           setTranscript("");
-
           setCheckInStatus(
               "speaking"
           );
+
+          const question =
+              data?.message ||
+              (modeRef.current === "strict"
+                  ? "Time's up. Tell me clearly. Did you finish the task or not?"
+                  : "Your focus session is complete. Did you finish the task?");
+
+          const voiceEnabled = true;
+
+          console.log("[CHECKIN-TTS] CHECK-IN UI ACTIVE");
+          console.log("[CHECKIN-TTS] electronAPI:", !!window.electronAPI);
+          console.log("[CHECKIN-TTS] speak:", typeof window.electronAPI?.speak);
+          console.log("[CHECKIN-TTS] question:", question);
+          console.log("[CHECKIN-TTS] voiceEnabled:", voiceEnabled);
+          console.log("[CHECKIN-TTS] ABOUT TO CALL NATIVE TTS");
+
+          try {
+              const result = await window.electronAPI.speak(question);
+              console.log("[CHECKIN-TTS] NATIVE TTS COMPLETED", result);
+          } catch (error) {
+              console.error("[CHECKIN-TTS] NATIVE TTS FAILED", error);
+              throw error;
+          }
 
           const allowed =
               await requestMicrophonePermission();
@@ -123,21 +156,14 @@ export function FocusMode() {
                   error.message
               );
 
+              checkInVoiceStartedRef.current = false;
+
               toast.error(
                   getVoiceFailureMessage(error)
               );
 
               return;
           }
-
-          const message =
-              modeRef.current === "strict"
-                  ? "Time's up. Tell me clearly. Did you finish the task or not?"
-                  : "Your focus session is complete. Did you finish the task?";
-
-          await ttsService.speak(
-              message
-          );
 
           setCheckInStatus(
               "listening"
@@ -237,6 +263,8 @@ export function FocusMode() {
           setCheckInStatus(
               "error"
           );
+
+          checkInVoiceStartedRef.current = false;
 
           toast.error(
               `${getVoiceFailureMessage(error)} Manual completion and End Session are still available.`
@@ -386,6 +414,7 @@ console.log(
         }
 
         setShowCheckIn(false);
+        checkInVoiceStartedRef.current = false;
 
         voiceSessionService.clearSession();
 
@@ -439,7 +468,7 @@ console.log(
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [sessionId, isPaused]);
+  }, [sessionId, isPaused, timeLeft]);
 
   const getSessionTimeLeftSeconds = (session) => {
     if (!session) {
@@ -671,9 +700,21 @@ console.log(
         // FIX 5: If session is already in check-in state, show check-in UI
         // but don't restart voice recording - wait for socket event
         if (response.session.status === "check_in_pending") {
-            console.log("[FocusMode] Session already in check-in state - showing check-in UI");
+            console.log("[FocusMode] Session already in check-in state - restoring check-in voice flow");
             setShowCheckIn(true);
-            setCheckInStatus("listening");
+            setTimeLeft(0);
+            setCheckInStatus("speaking");
+
+            // The socket event may have fired before this renderer mounted.
+            // Re-trigger the check-in from persisted backend state so TTS/microphone
+            // are not skipped when the app is reopened or the renderer reconnects.
+            await startVoiceCheckInOnce({
+                sessionId: response.session._id,
+                timeout: response.session.voiceResponseTimeout,
+                message: response.session.mode === "strict"
+                    ? "Time's up. Tell me clearly. Did you finish the task or not?"
+                    : "Your focus session is complete. Did you finish the task?"
+            });
         }
 
       } catch (error) {
@@ -737,9 +778,11 @@ console.log(
   useEffect(()=>{
     const handleShowCheckIn = async (data) => {
     const settings = await getSettings().catch(() => ({}));
+    const voiceEnabled = settings?.voiceEnabled !== false;
 
     setShowCheckIn(true);
     setVoiceTimeout(data.timeout);
+    setTimeLeft(0);
 
     if (
         settings?.notificationsEnabled !== false &&
@@ -757,19 +800,20 @@ console.log(
     ) {
         const overlayResult = await window.electronAPI.showOverlay({
             ...data,
-            voiceEnabled: settings?.voiceEnabled !== false
+            voiceEnabled
         });
 
-        if (overlayResult?.inApp || overlayResult?.overlayShown === false) {
+        if (overlayResult?.inApp === true) {
+            await startVoiceCheckInOnce(data);
             return;
         }
 
-        return;
+        if (overlayResult?.overlayShown === true) {
+            return;
+        }
     }
 
-    if (settings?.voiceEnabled !== false) {
-        await startVoiceCheckIn(data);
-    }
+    await startVoiceCheckInOnce(data);
   };
 
     const handleFocusNextTask = (data) => {
@@ -788,6 +832,7 @@ console.log(
         );
 
         setShowCheckIn(false);
+        checkInVoiceStartedRef.current = false;
 
         voiceSessionService.clearSession();
 
@@ -820,6 +865,7 @@ console.log(
         );
 
         setShowCheckIn(false);
+        checkInVoiceStartedRef.current = false;
 
         voiceSessionService.clearSession();
 
@@ -860,6 +906,7 @@ console.log(
         "focus:snoozed",
         ()=>{
             setShowCheckIn(false);
+            checkInVoiceStartedRef.current = false;
         }
     );
 
@@ -867,6 +914,7 @@ console.log(
         "focus:recovery",
         ()=>{
             setShowCheckIn(false);
+            checkInVoiceStartedRef.current = false;
             voiceSessionService.clearSession();
             navigate("/recovery");
         }

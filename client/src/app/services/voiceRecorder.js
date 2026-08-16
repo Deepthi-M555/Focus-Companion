@@ -90,6 +90,15 @@ class VoiceRecorder {
 
                 if (!this.mediaRecorder) {
 
+                    this.stream
+                        ?.getTracks()
+                        .forEach(
+                            track =>
+                                track.stop()
+                        );
+
+                    this.stream = null;
+
                     resolve(
                         new Blob([], {
                             type:
@@ -136,6 +145,10 @@ class VoiceRecorder {
                                 track =>
                                     track.stop()
                             );
+
+                        this.mediaRecorder = null;
+                        this.stream = null;
+                        this.chunks = [];
 
                         reject(
                             event.error ||

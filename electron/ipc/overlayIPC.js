@@ -1,178 +1,197 @@
 function registerOverlayIPC({
     ipcMain,
-    overlayState,
-    ensureOverlayWindow,
+    overlayWindow,
     mainWindow
 }) {
 
-    const getOverlayWindow = () => {
-        const overlay = overlayState.window;
+    let pendingCheckIn = null;
+    let overlayRendererReady = false;
 
-        if (!overlay || overlay.isDestroyed()) {
-            return null;
+    const isOverlayAvailable =
+        () =>
+            overlayWindow &&
+            !overlayWindow.isDestroyed();
+
+    const shouldUseInAppCheckIn =
+        () => {
+
+            if (
+                !mainWindow ||
+                mainWindow.isDestroyed()
+            ) {
+                return false;
+            }
+
+            const appIsForeground =
+                mainWindow.isVisible() &&
+                mainWindow.isFocused() &&
+                !mainWindow.isMinimized();
+
+            return appIsForeground;
+        };
+
+    const sendPendingCheckIn = () => {
+
+        if (
+            pendingCheckIn &&
+            isOverlayAvailable() &&
+            overlayRendererReady
+        ) {
+            console.log("[OVERLAY TTS] dispatching check-in payload", pendingCheckIn);
+            overlayWindow.webContents.send(
+                "check-in-required",
+                pendingCheckIn
+            );
+            pendingCheckIn = null;
         }
 
-        return overlay;
-    };
-
-    const deliverPendingCheckIn = () => {
-        const overlay = getOverlayWindow();
-
-        if (!overlay || overlay.isDestroyed()) {
-            return false;
-        }
-
-        if (!overlayState.ready || !overlayState.pendingCheckIn) {
-            return false;
-        }
-
-        overlay.show();
-        overlay.webContents.send(
-            "check-in-required",
-            overlayState.pendingCheckIn
-        );
-        overlayState.pendingCheckIn = null;
-
-        return true;
     };
 
     ipcMain.on(
         "overlay:renderer-ready",
         () => {
-            const overlay = getOverlayWindow();
 
-            if (!overlay || overlay.isDestroyed()) {
-                overlayState.ready = false;
-                return;
-            }
+            overlayRendererReady = true;
+            sendPendingCheckIn();
 
-            overlayState.ready = true;
-            deliverPendingCheckIn();
         }
     );
 
     ipcMain.handle(
         "show-overlay",
         async (_, data) => {
+
             try {
-                const activeMainWindow = typeof mainWindow === "function" ? mainWindow() : null;
-                const shouldStayInApp = Boolean(
-                    activeMainWindow &&
-                    !activeMainWindow.isDestroyed() &&
-                    activeMainWindow.isVisible() &&
-                    activeMainWindow.isFocused()
-                );
 
-                if (shouldStayInApp) {
-                    return {
-                        success: true,
-                        overlayShown: false,
-                        inApp: true,
-                        visible: false,
-                        ready: false
-                    };
-                }
-
-                const overlay = ensureOverlayWindow();
-
-                if (!overlay || overlay.isDestroyed()) {
-                    return {
-                        success: false,
-                        error: "Overlay window unavailable"
-                    };
-                }
-
-                if (data && typeof data === "object") {
-                    overlayState.pendingCheckIn = data;
-                }
-
-                overlay.show();
-                overlay.focus();
-                overlay.setAlwaysOnTop(true, "floating");
-
-                if (!overlayState.ready) {
-                    return {
-                        success: true,
-                        overlayShown: true,
-                        queued: true,
-                        visible: overlay.isVisible(),
-                        ready: false
-                    };
-                }
-
-                const delivered = deliverPendingCheckIn();
+            if (
+                !isOverlayAvailable()
+            ) {
 
                 return {
-                    success: true,
-                    overlayShown: true,
-                    queued: !delivered,
-                    visible: overlay.isVisible(),
-                    ready: overlayState.ready
+                    success: false,
+                    error:
+                        "Overlay window unavailable"
                 };
+
+            }
+
+            if (
+                shouldUseInAppCheckIn()
+            ) {
+                overlayWindow.hide();
+                pendingCheckIn = null;
+                return {
+                    success: true,
+                    visible: false,
+                    inApp: true,
+                    overlayShown: false
+                };
+            }
+
+            // The overlay BrowserWindow stays alive between check-ins. Its
+            // renderer sends overlay:renderer-ready once when it mounts.
+            // Do NOT reset readiness here, otherwise every later check-in
+            // gets stuck in pending state until the overlay is reloaded.
+            pendingCheckIn = data || null;
+            overlayWindow.show();
+            sendPendingCheckIn();
+
+            return {
+                success: true,
+                visible: overlayWindow.isVisible(),
+                inApp: false,
+                overlayShown: overlayWindow.isVisible()
+            };
+
             } catch (error) {
+
                 return {
                     success: false,
                     error: error.message || "Unable to show overlay"
                 };
+
             }
+
         }
     );
 
     ipcMain.handle(
         "hide-overlay",
         async () => {
+
             try {
-                const overlay = getOverlayWindow();
 
-                if (!overlay || overlay.isDestroyed()) {
-                    return {
-                        success: false,
-                        error: "Overlay window unavailable"
-                    };
-                }
+            if (
+                !isOverlayAvailable()
+            ) {
 
-                overlay.hide();
-                overlay.setAlwaysOnTop(false);
-                overlayState.ready = false;
+                overlayRendererReady = false;
+                pendingCheckIn = null;
 
                 return {
                     success: true,
-                    visible: overlay.isVisible()
+                    visible: false,
+                    message: "Overlay already hidden or destroyed"
                 };
-            } catch (error) {
-                return {
-                    success: false,
-                    error: error.message || "Unable to hide overlay"
-                };
+
             }
+
+            overlayWindow.hide();
+            pendingCheckIn = null;
+
+            return {
+                success: true,
+                visible: overlayWindow.isVisible()
+            };
+
+            } catch (error) {
+
+                overlayRendererReady = false;
+                pendingCheckIn = null;
+
+                return {
+                    success: true,
+                    visible: false,
+                    message: "Hide operation completed"
+                };
+
+            }
+
         }
     );
 
     ipcMain.handle(
         "overlay:get-status",
         async () => {
-            try {
-                const overlay = getOverlayWindow();
 
-                if (!overlay || overlay.isDestroyed()) {
+            try {
+
+                if (
+                    !isOverlayAvailable()
+                ) {
+
                     return {
                         success: false,
                         error: "Overlay window unavailable"
                     };
+
                 }
 
                 return {
                     success: true,
-                    visible: overlay.isVisible(),
-                    alwaysOnTop: overlay.isAlwaysOnTop(),
-                    ready: overlayState.ready
+                    visible: overlayWindow.isVisible(),
+                    alwaysOnTop: overlayWindow.isAlwaysOnTop()
                 };
+
             } catch (error) {
+
                 return {
                     success: false,
                     error: error.message || "Unable to read overlay status"
                 };
+
             }
+
         }
     );
 

@@ -28,7 +28,10 @@ function createMainWindow() {
                     true,
 
                 sandbox:
-                    true
+                    true,
+
+                autoplayPolicy:
+                    "no-user-gesture-required"
 
             }
 

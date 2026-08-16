@@ -1,146 +1,124 @@
 class TTSService {
     constructor() {
-        this.voice = null;
-
-        if ("speechSynthesis" in window) {
-            window.speechSynthesis.onvoiceschanged = () => {
-                this.voice = this.findFemaleVoice();
-            };
-
-            this.voice = this.findFemaleVoice();
-        }
+        this.activeTtsPromise = null;
+        this.lastText = null;
     }
 
-    findFemaleVoice() {
-        const voices =
-            window.speechSynthesis?.getVoices?.() || [];
-
-        if (!voices.length) {
-            return null;
+    async stop() {
+        if (window.electronAPI?.stopSpeaking) {
+            try {
+                await window.electronAPI.stopSpeaking();
+            } catch (error) {
+                console.warn(
+                    "[TTS] native stop failed:",
+                    error
+                );
+            }
         }
 
-        const femaleNames = [
-            "Samantha",
-            "Victoria",
-            "Karen",
-            "Zira",
-            "Jenny",
-            "Aria",
-            "Ava",
-            "Hazel",
-            "Sonia",
-            "Google UK English Female",
-            "Google US English",
-            "Microsoft Zira",
-            "Microsoft Jenny"
-        ];
-
-        const femaleVoice =
-            voices.find(voice =>
-                femaleNames.some(name =>
-                    voice.name
-                        .toLowerCase()
-                        .includes(name.toLowerCase())
-                )
-            );
-
-        if (femaleVoice) {
-            return femaleVoice;
-        }
-
-        return (
-            voices.find(voice =>
-                voice.lang?.toLowerCase().startsWith("en-in")
-            ) ||
-            voices.find(voice =>
-                voice.lang?.toLowerCase().startsWith("en-us")
-            ) ||
-            voices.find(voice =>
-                voice.lang?.toLowerCase().startsWith("en-gb")
-            ) ||
-            voices[0]
-        );
+        this.activeTtsPromise = null;
+        this.lastText = null;
     }
 
     async speak(text) {
-        if (
-            typeof window === "undefined" ||
-            !("speechSynthesis" in window)
-        ) {
+        const safeText =
+            String(text ?? "").trim();
+
+        if (!safeText) {
+            console.warn(
+                "[TTS] empty text"
+            );
+
             return false;
         }
 
-        const speakNow = () => {
-            return new Promise((resolve, reject) => {
-                const utterance =
-                    new SpeechSynthesisUtterance(text);
+        if (
+            this.activeTtsPromise &&
+            this.lastText === safeText
+        ) {
+            console.log(
+                "[TTS] duplicate speech suppressed"
+            );
 
-                const voice =
-                    this.voice ||
-                    this.findFemaleVoice();
-
-                if (voice) {
-                    utterance.voice = voice;
-                }
-
-                utterance.lang =
-                    voice?.lang || "en-IN";
-
-                utterance.rate = 0.95;
-                utterance.pitch = 1.05;
-                utterance.volume = 1;
-
-                utterance.onend = () => resolve(true);
-
-                utterance.onerror = (event) => {
-                    console.error(
-                        "TTS error:",
-                        event
-                    );
-
-                    reject(
-                        new Error(
-                            "FYNIX voice playback failed."
-                        )
-                    );
-                };
-
-                window.speechSynthesis.cancel();
-
-                window.speechSynthesis.speak(
-                    utterance
-                );
-            });
-        };
-
-        const voices =
-            window.speechSynthesis.getVoices();
-
-        if (!voices.length) {
-            await new Promise(resolve => {
-                const handler = () => {
-                    window.speechSynthesis.removeEventListener(
-                        "voiceschanged",
-                        handler
-                    );
-
-                    resolve();
-                };
-
-                window.speechSynthesis.addEventListener(
-                    "voiceschanged",
-                    handler
-                );
-
-                setTimeout(resolve, 1000);
-            });
+            return this.activeTtsPromise;
         }
 
-        this.voice =
-            this.voice ||
-            this.findFemaleVoice();
+        if (
+            !window.electronAPI?.speak
+        ) {
+            console.error(
+                "[TTS] Electron native TTS unavailable"
+            );
 
-        return speakNow();
+            return false;
+        }
+
+        await this.stop();
+
+        this.lastText = safeText;
+
+        this.activeTtsPromise =
+            (async () => {
+
+                try {
+
+                    console.log(
+                        "[TTS:NATIVE] requesting:",
+                        safeText
+                    );
+
+                    const result =
+                        await window.electronAPI.speak(
+                            safeText
+                        );
+
+                    console.log(
+                        "[TTS:NATIVE] result:",
+                        result
+                    );
+
+                    if (
+                        result?.success
+                    ) {
+
+                        console.log(
+                            "[TTS:NATIVE] completed"
+                        );
+
+                        return true;
+                    }
+
+                    throw new Error(
+                        result?.error ||
+                        "Native Windows TTS failed"
+                    );
+
+                } catch (error) {
+
+                    console.error(
+                        "[TTS:NATIVE] failed:",
+                        error
+                    );
+
+                    return false;
+
+                } finally {
+
+                    if (
+                        this.lastText ===
+                        safeText
+                    ) {
+                        this.activeTtsPromise =
+                            null;
+
+                        this.lastText =
+                            null;
+                    }
+                }
+
+            })();
+
+        return this.activeTtsPromise;
     }
 }
 

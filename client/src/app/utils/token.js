@@ -1,31 +1,31 @@
 function decodeJwtPayload(token) {
-    if (!token) {
-        return null;
-    }
-
+    if (!token) return null;
     const parts = token.split(".");
-    if (parts.length < 2) {
-        return null;
-    }
-
-    const payload = parts[1]
-        .replace(/-/g, "+")
-        .replace(/_/g, "/");
+    if (parts.length < 2) return null;
+    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     const padded = payload.padEnd(Math.ceil(payload.length / 4) * 4, "=");
-
-    try {
-        return JSON.parse(atob(padded));
-    } catch {
-        return null;
-    }
+    try { return JSON.parse(atob(padded)); } catch { return null; }
 }
 
+// Electron main window and overlay are separate renderer contexts.
+// sessionStorage is per renderer, so the overlay cannot see the login token.
+// Keep the token in origin-local storage so both windows share it and the
+// login survives an Electron restart. Mirror/remove the old sessionStorage
+// value for backwards compatibility.
 export function saveToken(token) {
+    localStorage.setItem("token", token);
     sessionStorage.setItem("token", token);
 }
 
 export function getToken() {
-    return sessionStorage.getItem("token");
+    const localToken = localStorage.getItem("token");
+    if (localToken) return localToken;
+    const sessionToken = sessionStorage.getItem("token");
+    if (sessionToken) {
+        localStorage.setItem("token", sessionToken);
+        return sessionToken;
+    }
+    return null;
 }
 
 export function getUserIdFromToken() {
@@ -46,5 +46,6 @@ export function clearUserScopedClientState() {
 }
 
 export function removeToken() {
+    localStorage.removeItem("token");
     sessionStorage.removeItem("token");
 }

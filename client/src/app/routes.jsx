@@ -7,10 +7,10 @@ import { Setup } from "./pages/Setup.jsx";
 import { Dashboard } from "./pages/Dashboard.jsx";
 import { Timetable } from "./pages/Timetable.jsx";
 import { FocusMode } from "./pages/FocusMode.jsx";
-import { Overlay } from "./pages/Overlay.jsx";
 import { Analytics } from "./pages/Analytics.jsx";
 import { Settings } from "./pages/Settings.jsx";
 import { Recovery } from "./pages/Recovery.jsx";
+import { Overlay } from "./pages/Overlay.jsx";
 import { ErrorPage } from "./pages/ErrorPage.jsx";
 
 import ProtectedRoute from "./components/ProtectedRoute";
