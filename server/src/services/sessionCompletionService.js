@@ -25,6 +25,11 @@ const {
     clearSessionTimer
 } = require("./sessionTimerService");
 
+const {
+    invalidateAnalytics
+} = require(
+    "./cacheService"
+);
 
 async function completeSessionAndAdvance({
     userId,
@@ -50,9 +55,7 @@ async function completeSessionAndAdvance({
         const error = new Error(
             "Session is controlled by the desktop client."
         );
-
         error.statusCode = 409;
-
         throw error;
     }
 
@@ -98,6 +101,9 @@ async function completeSessionAndAdvance({
         session.plannedDuration;
 
     await session.save();
+    await invalidateAnalytics(
+        userId
+    );
 
     await Task.findOneAndUpdate(
         {
@@ -314,13 +320,11 @@ async function completeSessionAndAdvance({
             }
         );
     }
-
+    
     return {
         completedSession:
             session,
-
         nextSession,
-
         nextTask,
 
         currentTaskIndex:
@@ -333,7 +337,6 @@ async function completeSessionAndAdvance({
             false
     };
 }
-
 
 module.exports = {
     completeSessionAndAdvance

@@ -34,6 +34,17 @@ const {
 const ExpressError =
 require("../utils/ExpressError");
 
+const {
+    acquireLock,
+    releaseLock
+} = require(
+    "../services/redisLockService"
+);
+const {
+    invalidateAnalytics
+} = require(
+    "../services/cacheService"
+);
 module.exports.startSession =
 async (req, res) => {
   const {
@@ -44,6 +55,23 @@ async (req, res) => {
 
   const sessionMode =
     mode === "strict" ? "strict" : "gentle";
+
+    const lockKey =
+      `fynix:lock:start-session:${req.identity.userId}`;
+
+  const lockToken =
+      await acquireLock(
+          lockKey,
+          10
+      );
+
+  if (!lockToken) {
+
+      throw new ExpressError(
+          409,
+          "Another session start is already being processed."
+      );
+  }
 
   console.log("[startSession] Called by user:", req.identity.userId);
   console.log("[startSession] Request body:", { taskId, mode, owner });
@@ -195,6 +223,13 @@ async (req, res) => {
 
         snoozeCount: 0
     });
+    await invalidateAnalytics(
+        req.identity.userId
+    );
+    await releaseLock(
+        lockKey,
+        lockToken
+    );
 
     console.log("[startSession] ===== SESSION CREATED =====");
     console.log("[startSession] New session:", {
