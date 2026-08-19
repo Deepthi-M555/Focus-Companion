@@ -3,7 +3,8 @@ const requiredEnvVars=[
 "JWT_SECRET",
 "OPENROUTER_API_KEY",
 "OPENROUTER_MODEL",
-"VOICE_SERVICE_URL"
+"VOICE_SERVICE_URL",
+"REDIS_URL"
 ];
 
 const validateEnv = () => {

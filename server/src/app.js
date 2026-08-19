@@ -13,6 +13,11 @@ const userRoutes = require("./routes/userRoutes");
 
 const aiRoutes = require("./ai/routes/aiRoutes");
 
+const redisRateLimit =
+    require(
+        "./middleware/redisRateLimit"
+    );
+
 const focusVoiceRoutes = require("./voice/routes/voiceRoutes");
 const { isLoggedIn } = require("./middleware/authMiddleware");
 const errorMiddleware = require("./middleware/errorMiddleware");
@@ -25,6 +30,13 @@ app.use(cors());
 
 app.use(express.json());
 
+app.use(
+    redisRateLimit({
+        windowSeconds: 60,
+        maxRequests: 120,
+        keyPrefix: "global"
+    })
+);
 /* =========================
    Routes
 ========================= */

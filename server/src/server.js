@@ -17,6 +17,14 @@ require("./config/validateEnv");
 const authenticateSocket =
 require("./socket/authSocket");
 
+const {
+    connectRedis,
+    disconnectRedis,
+    configureSocketRedis
+} = require(
+    "./config/redis"
+);
+
 const PORT =
 process.env.PORT || 5000;
 
@@ -42,6 +50,7 @@ new Server(server, {
   }
 
 });
+configureSocketRedis(io);
 
 app.set("io",io);
 
@@ -113,7 +122,7 @@ async () => {
   try {
 
     await connectDB();
-
+    await connectRedis();
     server.listen(
 
       PORT,
@@ -143,6 +152,36 @@ async () => {
 
 startServer();
 
+process.on(
+    "SIGINT",
+    async () => {
+
+        console.log(
+            "[SERVER] Shutting down..."
+        );
+
+        await disconnectRedis();
+
+        process.exit(0);
+
+    }
+);
+
+
+process.on(
+    "SIGTERM",
+    async () => {
+
+        console.log(
+            "[SERVER] Shutting down..."
+        );
+
+        await disconnectRedis();
+
+        process.exit(0);
+
+    }
+);
 /*
   APPLICATION FLOW
 
