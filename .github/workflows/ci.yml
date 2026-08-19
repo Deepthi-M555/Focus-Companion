@@ -145,10 +145,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/fynix-server:latest
-            ghcr.io/${{ github.repository_owner }}/fynix-server:${{ github.sha }}
-
-
+            ghcr.io/deepthi-m555/fynix-server:latest
+            ghcr.io/deepthi-m555/fynix-server:${{ github.sha }}
       - name: Build and push voice service
         uses: docker/build-push-action@v6
         with:
@@ -156,12 +154,11 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/fynix-voice:latest
-            ghcr.io/${{ github.repository_owner }}/fynix-voice:${{ github.sha }}
-
+            ghcr.io/deepthi-m555/fynix-voice:latest
+            ghcr.io/deepthi-m555/fynix-voice:${{ github.sha }}
 
       - name: CD completed
         run: |
           echo "FYNIX multi-platform images published."
-          echo "Server: ghcr.io/${{ github.repository_owner }}/fynix-server"
-          echo "Voice:  ghcr.io/${{ github.repository_owner }}/fynix-voice"
+          echo "Server: ghcr.io/deepthi-m555/fynix-server"
+          echo "Voice:  ghcr.io/deepthi-m555/fynix-voice"
