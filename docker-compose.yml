@@ -1,0 +1,100 @@
+services:
+
+  redis:
+    image: redis:7-alpine
+    container_name: fynix-redis
+    restart: unless-stopped
+
+    ports:
+      - "6379:6379"
+
+    volumes:
+      - redis-data:/data
+
+    command:
+      - redis-server
+      - --appendonly
+      - yes
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "redis-cli",
+          "ping"
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+
+  voice-service:
+    build:
+      context: ./voice-service
+      dockerfile: Dockerfile
+
+    container_name: fynix-voice
+
+    restart: unless-stopped
+
+    environment:
+      WHISPER_MODEL: ${WHISPER_MODEL:-small.en}
+
+    ports:
+      - "8001:8000"
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+
+    container_name: fynix-server
+
+    restart: unless-stopped
+
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+
+      MONGO_URI: ${MONGO_URI}
+      JWT_SECRET: ${JWT_SECRET}
+
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL}
+
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL}
+
+      REDIS_URL: redis://redis:6379
+
+      VOICE_SERVICE_URL: http://voice-service:8000
+
+    ports:
+      - "5001:5000"
+
+    depends_on:
+
+      redis:
+        condition: service_healthy
+
+      voice-service:
+        condition: service_healthy
+
+
+volumes:
+
+  redis-data:
