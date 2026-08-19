@@ -5,6 +5,7 @@ node_modules/
 # Package lock files
 package-lock.json
 client/package-lock.json
+client/
 
 # Environment files
 .env
@@ -71,3 +72,6 @@ server/uploads/
 *.tmp
 *.temp
 
+.env
+.env.*
+!.env.example
