@@ -1,4 +1,4 @@
-name: FYNIX CI
+name: FYNIX CI/CD
 
 on:
   push:
@@ -9,25 +9,32 @@ on:
     branches:
       - main
 
-  workflow_dispatch:
 
 jobs:
 
+  # ==========================================
+  # CI — FRONTEND
+  # ==========================================
+
   frontend-build:
+
     name: Frontend Build
+
     runs-on: ubuntu-latest
 
     steps:
 
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
 
-      - name: Install frontend dependencies
+      - name: Install dependencies
         working-directory: client
         run: npm ci
 
@@ -36,37 +43,121 @@ jobs:
         run: npm run build
 
 
+  # ==========================================
+  # CI — BACKEND
+  # ==========================================
+
   backend-check:
+
     name: Backend Check
+
     runs-on: ubuntu-latest
 
     steps:
 
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
 
-      - name: Install backend dependencies
+      - name: Install dependencies
         working-directory: server
         run: npm ci
 
-      - name: Check backend syntax
+      - name: Syntax check
         working-directory: server
         run: node --check src/server.js
 
 
+  # ==========================================
+  # CI — DOCKER
+  # ==========================================
+
   docker-build:
+
     name: Docker Build
+
     runs-on: ubuntu-latest
+
+    needs:
+      - frontend-build
+      - backend-check
 
     steps:
 
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Build Docker images
         run: docker compose build
+
+
+  # ==========================================
+  # CD — PUSH IMAGES TO GHCR
+  # ==========================================
+
+  cd-publish:
+
+    name: CD - Publish Docker Images
+
+    runs-on: ubuntu-latest
+
+    needs:
+      - docker-build
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+
+      - name: Build server image
+        run: |
+          docker build \
+            -t ghcr.io/${{ github.repository_owner }}/fynix-server:latest \
+            ./server
+
+
+      - name: Build voice service image
+        run: |
+          docker build \
+            -t ghcr.io/${{ github.repository_owner }}/fynix-voice:latest \
+            ./voice-service
+
+
+      - name: Push server image
+        run: |
+          docker push \
+            ghcr.io/${{ github.repository_owner }}/fynix-server:latest
+
+
+      - name: Push voice service image
+        run: |
+          docker push \
+            ghcr.io/${{ github.repository_owner }}/fynix-voice:latest
+
+
+      - name: CD completed
+        run: |
+          echo "FYNIX Docker images published successfully."
+          echo "Server: ghcr.io/${{ github.repository_owner }}/fynix-server:latest"
+          echo "Voice:  ghcr.io/${{ github.repository_owner }}/fynix-voice:latest"
