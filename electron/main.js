@@ -335,24 +335,7 @@ app.on(
 app.whenReady().then(() => {
     mainWindow =
         createTrackedMainWindow();
-    mainWindow.on("focus", () => {
-        if (
-            overlayWindow &&
-            !overlayWindow.isDestroyed() &&
-            overlayWindow.isVisible()
-        ) {
-            overlayWindow.hide();
-        }
-    });
-    mainWindow.on("show", () => {
-        if (
-            overlayWindow &&
-            !overlayWindow.isDestroyed() &&
-            overlayWindow.isVisible()
-        ) {
-            overlayWindow.hide();
-        }
-    });
+
     overlayWindow =
         ensureOverlayWindow();
     registerOverlayIPC({

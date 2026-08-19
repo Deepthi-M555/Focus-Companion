@@ -69,13 +69,13 @@ export function Dashboard() {
   const [todayTasks, setTodayTasks] = useState([]);
   const [messages, setMessages] = useState(() => {
   const storageKey = getScopedStorageKey("dashboardMessages");
-  const storedMessages = sessionStorage.getItem(storageKey);
+  const storedMessages = localStorage.getItem(storageKey);
 
     if (storedMessages) {
       try {
         return JSON.parse(storedMessages);
       } catch {
-        sessionStorage.removeItem(storageKey);
+        localStorage.removeItem(storageKey);
       }
     }
 
@@ -99,7 +99,7 @@ export function Dashboard() {
   }, [messages]);
 
   useEffect(() => {
-    sessionStorage.setItem(getScopedStorageKey("dashboardMessages"), JSON.stringify(messages));
+    localStorage.setItem(getScopedStorageKey("dashboardMessages"), JSON.stringify(messages));
   }, [messages]);
 
   useEffect(() => {
@@ -126,9 +126,9 @@ export function Dashboard() {
     try {
         const response = await chat(userMessage);
         const generatedTasks = response.data?.tasks || [];
-        sessionStorage.removeItem(getScopedStorageKey("pendingSchedule"));
+        localStorage.removeItem(getScopedStorageKey("pendingSchedule"));
         if (generatedTasks.length) {
-            sessionStorage.setItem(
+            localStorage.setItem(
                 getScopedStorageKey("pendingSchedule"),
                 JSON.stringify(generatedTasks)
             );

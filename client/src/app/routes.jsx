@@ -1,4 +1,5 @@
 import { createBrowserRouter, createHashRouter, Navigate } from "react-router-dom";
+import {getToken} from "./utils/token";
 import { AuthLayout } from "./layouts/AuthLayout.jsx";
 import { AppLayout } from "./layouts/AppLayout.jsx";
 import { Login } from "./pages/Login.jsx";
@@ -21,10 +22,34 @@ const createAppRouter =
         ? createHashRouter
         : createBrowserRouter;
 
+function RootRedirect() {
+
+  const token =
+    getToken();
+
+  if (token) {
+
+    return (
+      <Navigate
+        to="/dashboard"
+        replace
+      />
+    );
+
+  }
+
+  return (
+    <Navigate
+      to="/login"
+      replace
+    />
+  );
+
+}
 export const router = createAppRouter([
   {
     path: "/",
-    element: <Navigate to="/login" replace />,
+    element: <RootRedirect />,
     errorElement: <ErrorPage />,
   },
   {

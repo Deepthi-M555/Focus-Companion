@@ -13,7 +13,7 @@ function applyProductionCSP() {
                 "default-src 'self'; " +
                 "script-src 'self'; " +
                 "style-src 'self' 'unsafe-inline'; " +
-                "img-src 'self' data: blob:; " +
+                "img-src 'self' data: blob: https://images.unsplash.com; " +
                 "font-src 'self' data:; " +
                 "media-src 'self' blob:; " +
                 "connect-src 'self' https: wss: http://localhost:5000 ws://localhost:5000 http://127.0.0.1:8000; " +

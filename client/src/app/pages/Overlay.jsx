@@ -102,9 +102,9 @@ export function Overlay() {
           transcript: result.transcript
         });
 
-        setTimeout(() => {
-          setVoiceState(VoiceStates.CLOSING);
-        }, VOICE_CONFIG.CLOSING_DELAY_MS);
+        console.log(
+            "[Overlay:VOICE] Response sent; waiting for server result"
+        );
       } catch (error) {
         setVoiceState(VoiceStates.ERROR);
         console.error("[Overlay] Upload voice failed:", error);
@@ -118,9 +118,53 @@ export function Overlay() {
   useEffect(() => {
     connectSocket();
 
+    socket.on(
+        "connect",
+        () => {
+
+            console.log(
+                "[Overlay:SOCKET] Connected:",
+                socket.id
+            );
+
+        }
+    );
+
+    socket.on(
+        "connect_error",
+        (error) => {
+
+            console.error(
+                "[Overlay:SOCKET] Connection error:",
+                error
+            );
+
+        }
+    );
+
     const handleElectronCheckIn = (data) => {
-      setSessionId(data?.sessionId);
-      startVoiceCheckIn(data);
+
+        const currentSessionId =
+            data?.sessionId;
+
+        setSessionId(
+            currentSessionId
+        );
+
+        if (currentSessionId) {
+
+            socket.emit(
+                "join_focus_session",
+                currentSessionId
+            );
+
+            console.log(
+                "[Overlay:SOCKET] Joined focus session:",
+                currentSessionId
+            );
+        }
+
+        startVoiceCheckIn(data);
     };
 
     const removeElectronListener = window.electronAPI?.onCheckInRequired?.(
@@ -134,6 +178,63 @@ export function Overlay() {
       window.electronAPI?.hideOverlay?.();
     });
 
+    socket.on(
+        "focus:next-task",
+        (data) => {
+
+            console.log(
+                "[Overlay:SOCKET] Current task completed; next task:",
+                data?.task?.title ||
+                data?.task?.name
+            );
+
+            setVoiceState(
+                VoiceStates.COMPLETED
+            );
+
+            window.electronAPI?.hideOverlay?.();
+        }
+    );
+
+    socket.on(
+        "focus:clarify",
+        async (data) => {
+
+            console.log(
+                "[Overlay:SOCKET] Clarification requested:",
+                data
+            );
+
+            setVoiceState(
+                VoiceStates.SPEAKING
+            );
+
+            try {
+
+                await startVoiceCheckIn({
+                    sessionId:
+                        data?.sessionId ||
+                        sessionId,
+
+                    message:
+                        data?.message ||
+                        VOICE_CONFIG.CHECK_IN_MESSAGE
+                });
+
+            } catch (error) {
+
+                console.error(
+                    "[Overlay] Clarification failed:",
+                    error
+                );
+
+                setVoiceState(
+                    VoiceStates.ERROR
+                );
+            }
+        }
+    );
+
     socket.on("focus:snoozed", () => {
       setVoiceState(VoiceStates.SNOOZED);
       window.electronAPI?.hideOverlay?.();
@@ -145,10 +246,21 @@ export function Overlay() {
     });
 
     return () => {
-      removeElectronListener?.();
-      socket.off("focus:complete");
-      socket.off("focus:snoozed");
-      socket.off("focus:recovery");
+
+        removeElectronListener?.();
+        socket.off("connect");
+
+        socket.off("connect_error");
+
+        socket.off("focus:complete");
+
+        socket.off("focus:next-task");
+
+        socket.off("focus:snoozed");
+
+        socket.off("focus:recovery");
+
+        socket.off("focus:clarify");
     };
   }, []);
 

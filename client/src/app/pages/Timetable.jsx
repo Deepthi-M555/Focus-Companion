@@ -37,7 +37,7 @@ export function Timetable() {
   useEffect(() => {
     async function loadSchedule() {
       const pending =
-        sessionStorage.getItem(getScopedStorageKey("pendingSchedule"));
+        localStorage.getItem(getScopedStorageKey("pendingSchedule"));
 
       if (pending) {
         try {
@@ -53,7 +53,7 @@ export function Timetable() {
             error
           );
 
-          sessionStorage.removeItem(
+          localStorage.removeItem(
             getScopedStorageKey("pendingSchedule")
           );
         }
@@ -203,7 +203,7 @@ export function Timetable() {
                 tasks: blocks
             });
 
-        sessionStorage.removeItem(
+        localStorage.removeItem(
             getScopedStorageKey("pendingSchedule")
         );
 
