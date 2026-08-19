@@ -1,5 +1,65 @@
-const FocusSession = require("../models/FocusSession");
-const SessionEvent = require("../models/SessionEvent");
+const FocusSession =
+    require("../models/FocusSession");
+
+const SessionEvent =
+    require("../models/SessionEvent");
+const {
+    getJson,
+    setJson
+} = require(
+    "./cacheService"
+);
+
+function startOfDay(date) {
+
+    const result =
+        new Date(date);
+
+    result.setHours(
+        0,
+        0,
+        0,
+        0
+    );
+
+    return result;
+}
+
+
+function endOfDay(date) {
+
+    const result =
+        new Date(date);
+
+    result.setHours(
+        23,
+        59,
+        59,
+        999
+    );
+
+    return result;
+}
+
+
+function formatDateKey(date) {
+
+    const year =
+        date.getFullYear();
+
+    const month =
+        String(
+            date.getMonth() + 1
+        ).padStart(2, "0");
+
+    const day =
+        String(
+            date.getDate()
+        ).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+}
+
 
 function calculateFocusIntegrity({
     focusedMinutes,
@@ -7,12 +67,17 @@ function calculateFocusIntegrity({
     distractions
 }) {
 
-    if (plannedMinutes === 0) {
+    if (
+        plannedMinutes <= 0
+    ) {
         return 0;
     }
 
     const completion =
-        (focusedMinutes / plannedMinutes) * 100;
+        (
+            focusedMinutes /
+            plannedMinutes
+        ) * 100;
 
     const penalty =
         Math.min(
@@ -22,99 +87,324 @@ function calculateFocusIntegrity({
 
     return Math.max(
         0,
-        Math.round(
-            completion - penalty
+        Math.min(
+            100,
+            Math.round(
+                completion - penalty
+            )
         )
     );
-
 }
 
-async function getAnalytics(userId) {
 
-    const sessions =
+function calculateCurrentStreak(
+    completedSessions
+) {
+
+    const completedDays =
+        new Set();
+
+    completedSessions.forEach(
+        session => {
+
+            if (
+                !session.startedAt
+            ) {
+                return;
+            }
+
+            completedDays.add(
+                formatDateKey(
+                    new Date(
+                        session.startedAt
+                    )
+                )
+            );
+        }
+    );
+
+    if (
+        completedDays.size === 0
+    ) {
+        return 0;
+    }
+
+    const today =
+        startOfDay(
+            new Date()
+        );
+
+    const yesterday =
+        new Date(today);
+
+    yesterday.setDate(
+        yesterday.getDate() - 1
+    );
+
+    const todayKey =
+        formatDateKey(today);
+
+    const yesterdayKey =
+        formatDateKey(yesterday);
+
+    /*
+     * A current streak can continue
+     * from yesterday even if the user
+     * has not completed today's session yet.
+     */
+
+    let cursor;
+
+    if (
+        completedDays.has(
+            todayKey
+        )
+    ) {
+
+        cursor =
+            today;
+
+    } else if (
+        completedDays.has(
+            yesterdayKey
+        )
+    ) {
+
+        cursor =
+            yesterday;
+
+    } else {
+
+        return 0;
+    }
+
+    let streak = 0;
+
+    while (
+        completedDays.has(
+            formatDateKey(cursor)
+        )
+    ) {
+
+        streak++;
+
+        cursor =
+            new Date(cursor);
+
+        cursor.setDate(
+            cursor.getDate() - 1
+        );
+    }
+
+    return streak;
+}
+
+
+async function getAnalytics(
+    userId
+) {
+    const cacheKey =
+        `fynix:analytics:${userId}:current-week`;
+    const cached =
+        await getJson(
+            cacheKey
+        );
+
+    if (cached) {
+
+        console.log(
+            "[ANALYTICS CACHE] HIT"
+        );
+
+        return cached;
+
+    }
+
+    console.log(
+        "[ANALYTICS CACHE] MISS"
+    );
+    /*
+     * =========================
+     * CURRENT WEEK
+     * =========================
+     */
+
+    const now =
+        new Date();
+
+    const weekStart =
+        startOfDay(now);
+
+    /*
+     * Monday is the first day
+     * of the analytics week.
+     */
+
+    const dayOfWeek =
+        weekStart.getDay();
+
+    const daysSinceMonday =
+        dayOfWeek === 0
+            ? 6
+            : dayOfWeek - 1;
+
+    weekStart.setDate(
+        weekStart.getDate() -
+        daysSinceMonday
+    );
+
+    const weekEnd =
+        endOfDay(
+            new Date(
+                weekStart
+            )
+        );
+
+    weekEnd.setDate(
+        weekEnd.getDate() + 6
+    );
+
+
+    /*
+     * =========================
+     * WEEKLY SESSIONS
+     * =========================
+     */
+
+    const weeklySessions =
         await FocusSession.find({
-            user: userId
+
+            user: userId,
+
+            startedAt: {
+                $gte: weekStart,
+                $lte: weekEnd
+            }
+
         }).sort({
             startedAt: 1
         });
 
-    const events =
-        await SessionEvent.find({
-            user: userId
-        });
 
     /*
-        Total Planned Minutes
-    */
+     * Completed sessions only
+     * contribute to focus analytics.
+     */
 
-    const plannedMinutes =
-        sessions.reduce(
-
-            (sum, session) =>
-
-                sum +
-                session.plannedDuration,
-
-            0
-
-        );
-
-    /*
-        Total Focus Minutes
-    */
-
-    const focusedMinutes =
-        sessions.reduce(
-
-            (sum, session) =>
-
-                sum +
-                session.actualDuration,
-
-            0
-
-        );
-
-    /*
-        Completed Sessions
-    */
-
-    const completedSessions =
-        sessions.filter(
-
+    const weeklyCompletedSessions =
+        weeklySessions.filter(
             session =>
-
                 session.status ===
                 "completed"
-
         );
 
-    /*
-        Focus Hours
-    */
-
-    const focusHours =
-        (
-            focusedMinutes / 60
-        ).toFixed(1);
 
     /*
-        Distractions
-    */
+     * =========================
+     * ALL COMPLETED SESSIONS
+     * =========================
+     *
+     * Used only for streak.
+     */
+
+    const allCompletedSessions =
+        await FocusSession.find({
+
+            user: userId,
+
+            status: "completed",
+
+            startedAt: {
+                $ne: null
+            }
+
+        }).sort({
+            startedAt: 1
+        });
+
+
+    /*
+     * =========================
+     * WEEKLY PLANNED MINUTES
+     * =========================
+     */
+
+    const plannedMinutes =
+        weeklySessions.reduce(
+
+            (sum, session) =>
+
+                sum +
+                Number(
+                    session.plannedDuration ||
+                    0
+                ),
+
+            0
+        );
+
+
+    /*
+     * =========================
+     * WEEKLY COMPLETED MINUTES
+     * =========================
+     */
+
+    const focusedMinutes =
+        weeklyCompletedSessions.reduce(
+
+            (sum, session) =>
+
+                sum +
+                Number(
+                    session.actualDuration ||
+                    0
+                ),
+
+            0
+        );
+
+
+    /*
+     * =========================
+     * WEEKLY EVENTS
+     * =========================
+     */
+
+    const weeklyEvents =
+        await SessionEvent.find({
+
+            user: userId,
+
+            createdAt: {
+                $gte: weekStart,
+                $lte: weekEnd
+            }
+
+        });
+
+
+    /*
+     * =========================
+     * DISTRACTIONS
+     * =========================
+     */
 
     const distractions =
-        events.filter(
+        weeklyEvents.filter(
 
             event =>
-
                 event.type ===
                 "DISTRACTION"
 
         ).length;
 
+
     /*
-        Focus Integrity
-    */
+     * =========================
+     * FOCUS INTEGRITY
+     * =========================
+     */
 
     const focusIntegrity =
         calculateFocusIntegrity({
@@ -127,13 +417,28 @@ async function getAnalytics(userId) {
 
         });
 
+
     /*
-        Average Session
-    */
+     * =========================
+     * FOCUS HOURS
+     * =========================
+     */
+
+    const focusHours =
+        (
+            focusedMinutes / 60
+        ).toFixed(2);
+
+
+    /*
+     * =========================
+     * AVERAGE SESSION
+     * =========================
+     */
 
     const averageSession =
 
-        completedSessions.length === 0
+        weeklyCompletedSessions.length === 0
 
             ? "0 mins"
 
@@ -143,290 +448,257 @@ async function getAnalytics(userId) {
 
                 focusedMinutes /
 
-                completedSessions.length
+                weeklyCompletedSessions.length
 
             )} mins`;
 
+
     /*
-        Productive Time
-    */
+     * =========================
+     * PRODUCTIVE TIME
+     * =========================
+     */
 
     const hourlyMap = {};
 
-    completedSessions.forEach(
 
+    weeklyCompletedSessions.forEach(
         session => {
 
-            if (!session.startedAt) {
+            if (
+                !session.startedAt
+            ) {
                 return;
             }
-
             const hour =
                 new Date(
                     session.startedAt
                 ).getHours();
-
             hourlyMap[hour] =
-                (hourlyMap[hour] || 0) + 1;
-
-        }
-
-    );
-
-    let productiveHour = null;
-    let maxCount = 0;
-
-    Object.entries(hourlyMap)
-
-        .forEach(
-
-            ([hour, count]) => {
-
-                if (count > maxCount) {
-
-                    maxCount = count;
-
-                    productiveHour =
-                        Number(hour);
-
-                }
-
-            }
-
-        );
-
-    const productiveTime =
-
-        productiveHour === null
-
-            ? "No Data"
-
-            : `${productiveHour}:00 - ${productiveHour + 1}:00`;
-
-    /*
-        Current Streak
-    */
-
-    const uniqueDays = [
-
-        ...new Set(
-
-            completedSessions.map(
-
-                session =>
-
-                    new Date(session.startedAt)
-
-                        .toISOString()
-
-                        .split("T")[0]
-
-            )
-
-        )
-
-    ].sort(
-        (a, b) =>
-
-            new Date(b) - new Date(a)
-    );
-
-    let streak = 0;
-
-    let expected = new Date();
-
-    expected.setHours(0, 0, 0, 0);
-
-    for (const day of uniqueDays) {
-
-        const current =
-
-            new Date(day);
-
-        current.setHours(0, 0, 0, 0);
-
-        const diff =
-
-            (expected - current)
-
-            / (1000 * 60 * 60 * 24);
-
-        if (diff === 0) {
-
-            streak++;
-
-            expected.setDate(
-
-                expected.getDate() - 1
-
-            );
-
-        }
-
-        else {
-
-            break;
-
-        }
-
-    }
-
-    /*
-        Weekly Hours
-    */
-
-    const weeklyMap = {};
-
-    completedSessions.forEach(
-
-        session => {
-
-            const day =
-
-                new Date(
-                    session.startedAt
-                )
-
-                .toLocaleDateString(
-
-                    "en-US",
-
-                    {
-
-                        weekday: "short"
-
-                    }
-
-                );
-
-            weeklyMap[day] =
-
                 (
-
-                    weeklyMap[day] ||
-
+                    hourlyMap[hour] ||
                     0
-
-                ) +
-
-                session.actualDuration / 60;
-
+                ) + 1;
         }
-
     );
+    let productiveHour =
+        null;
+    let maxCount =
+        0;
 
-    const order = [
+    Object.entries(
+        hourlyMap
+    ).forEach(
+        ([hour, count]) => {
+            if (
+                count >
+                maxCount
+            ) {
+                maxCount =
+                    count;
 
+                productiveHour =
+                    Number(hour);
+            }
+        }
+    );
+    const productiveTime =
+        productiveHour === null
+            ? "No Data"
+            : `${String(
+                productiveHour
+            ).padStart(2, "0")}:00 - ${String(
+                productiveHour + 1
+            ).padStart(2, "0")}:00`;
+    /*
+     * =========================
+     * CURRENT STREAK
+     * =========================
+     */
+    const streak =
+        calculateCurrentStreak(
+            allCompletedSessions
+        );
+    /*
+     * =========================
+     * DAILY WEEKLY DATA
+     * =========================
+     */
+    const dayNames = [
         "Mon",
-
         "Tue",
-
         "Wed",
-
         "Thu",
-
         "Fri",
-
         "Sat",
-
         "Sun"
-
     ];
 
-    const weeklyData =
+    const dailyMap = {};
 
-        order.map(
+    for (
+        let i = 0;
+        i < 7;
+        i++
+    ) {
+        const day =
+            new Date(
+                weekStart
+            );
+        day.setDate(
+            weekStart.getDate() +
+            i
+        );
+        const key =
+            formatDateKey(day);
+        dailyMap[key] = {
+            name:
+                dayNames[i],
+            plannedMinutes:
+                0,
+            focusedMinutes:
+                0,
+            distractions:
+                0
+        };
+    }
 
-            day => ({
-
-                name: day,
-
-                hours:
-
+    weeklySessions.forEach(
+        session => {
+            if (
+                !session.startedAt
+            ) {
+                return;
+            }
+            const date =
+                new Date(
+                    session.startedAt
+                );
+            const key =
+                formatDateKey(date);
+            if (
+                !dailyMap[key]
+            ) {
+                return;
+            }
+            dailyMap[key]
+                .plannedMinutes +=
+                Number(
+                    session.plannedDuration ||
+                    0
+                );
+            if (
+                session.status ===
+                "completed"
+            ) {
+                dailyMap[key]
+                    .focusedMinutes +=
                     Number(
+                        session.actualDuration ||
+                        0
+                    );
+            }
+        }
+    );
 
-                        (
-
-                            weeklyMap[day] ||
-
-                            0
-
-                        )
-
-                        .toFixed(1)
-
+    weeklyEvents.forEach(
+        event => {
+            const key =
+                formatDateKey(
+                    new Date(
+                        event.createdAt
                     )
-
-            })
-
-        );
-
-    /*
-        Trend Data
-    */
-
-    const trendData =
-
-        weeklyData.map(
-
+                );
+            if (
+                dailyMap[key] &&
+                event.type ===
+                "DISTRACTION"
+            ) {
+                dailyMap[key]
+                    .distractions += 1;
+            }
+        }
+    );
+    const weeklyData =
+        Object.values(
+            dailyMap
+        ).map(
             day => ({
-
-                day: day.name,
-
-                score:
-
-                    Math.min(
-
-                        100,
-
-                        Math.round(
-
-                            day.hours *
-
-                            20
-
-                        )
-
+                name:
+                    day.name,
+                hours:
+                    Number(
+                        (
+                            day.focusedMinutes /
+                            60
+                        ).toFixed(2)
                     )
-
             })
-
         );
-
     /*
-        Insight
-    */
+     * =========================
+     * DAILY FOCUS TREND
+     * =========================
+     */
+    const trendData =
+        Object.values(
+            dailyMap
+        ).map(
+            day => {
+                const completion =
+                    day.plannedMinutes > 0
+                        ? (
+                            day.focusedMinutes /
+                            day.plannedMinutes
+                        ) * 100
+                        : 0;
 
+                const score =
+                    Math.max(
+                        0,
+                        Math.min(
+                            100,
+                            Math.round(
+                                completion -
+                                Math.min(
+                                    day.distractions * 3,
+                                    30
+                                )
+                            )
+                        )
+                    );
+                return {
+                    day:
+                        day.name,
+                    score
+                };
+
+            }
+        );
+    /*
+     * =========================
+     * INSIGHT
+     * =========================
+     */
     let insight =
-
         "Keep building consistent focus sessions.";
-
-    if (focusIntegrity >= 90) {
-
+    if (
+        focusIntegrity >= 90
+    ) {
         insight =
             "Excellent focus consistency. Keep maintaining your routine.";
-
-    }
-
-    else if (
-
+    } else if (
         focusIntegrity >= 70
-
     ) {
-
         insight =
             "Good progress. Reducing distractions will improve your focus further.";
-
-    }
-
-    else {
-
+    } else if (
+        focusedMinutes > 0
+    ) {
         insight =
             "Your focus sessions are frequently interrupted. Try shorter sessions and fewer distractions.";
-
     }
-
-    return {
+    const analytics = {
 
         stats: {
 
@@ -450,12 +722,19 @@ async function getAnalytics(userId) {
 
         insight
 
-    };
+        };
 
+
+    await setJson(
+        cacheKey,
+        analytics,
+        30
+    );
+
+
+    return analytics;
 }
 
 module.exports = {
-
     getAnalytics
-
 };
