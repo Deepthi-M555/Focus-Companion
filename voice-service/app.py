@@ -1,4 +1,5 @@
 from fastapi import FastAPI,UploadFile,File,HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from services.whisper_service import transcribe
 import tempfile
 import shutil
@@ -8,6 +9,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app=FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 
 @app.get("/health")
 async def health():

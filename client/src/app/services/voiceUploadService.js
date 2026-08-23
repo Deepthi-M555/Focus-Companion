@@ -1,5 +1,19 @@
-import api from "./api";
-import { VOICE_CONFIG } from "../config/voiceConfig";
+const isElectron =
+    Boolean(
+        window.electronAPI?.isElectron
+    );
+
+
+const VOICE_URL =
+    isElectron
+        ? "http://127.0.0.1:8001"
+        : (
+            import.meta.env.VITE_VOICE_URL ||
+            "http://127.0.0.1:8001"
+        );
+        
+const VOICE_TIMEOUT_MS = 30000;
+
 
 export async function uploadVoice(blob) {
 
@@ -12,6 +26,7 @@ export async function uploadVoice(blob) {
         );
     }
 
+
     const formData =
         new FormData();
 
@@ -21,39 +36,133 @@ export async function uploadVoice(blob) {
         "voice.webm"
     );
 
+
+    const controller =
+        new AbortController();
+
+    const timeout =
+        setTimeout(
+            () => {
+                controller.abort();
+            },
+            VOICE_TIMEOUT_MS
+        );
+
+
     try {
 
         const response =
-            await api.post(
-                "/voice/checkin",
-                formData,
+            await fetch(
+                `${VOICE_URL}/transcribe`,
                 {
-                    timeout:
-                        VOICE_CONFIG.API_TIMEOUT_MS
+                    method: "POST",
+
+                    body: formData,
+
+                    signal:
+                        controller.signal
                 }
             );
 
-        return response.data;
+
+        if (!response.ok) {
+
+            let detail =
+                "Voice transcription failed.";
+
+            try {
+
+                const body =
+                    await response.json();
+
+                detail =
+                    body?.detail ||
+                    body?.error ||
+                    detail;
+
+            } catch {
+                // Response was not JSON.
+            }
+
+            const error =
+                new Error(
+                    detail
+                );
+
+            error.status =
+                response.status;
+
+            error.code =
+                response.status === 503
+                    ? "VOICE_SERVICE_UNAVAILABLE"
+                    : "VOICE_UPLOAD_FAILED";
+
+            throw error;
+        }
+
+
+        const data =
+            await response.json();
+
+
+        const transcript =
+            (
+                data?.text ||
+                data?.transcript ||
+                ""
+            ).trim();
+
+
+        return {
+            ...data,
+            transcript
+        };
+
 
     } catch (error) {
-        const status =
-            error.response?.status;
-        const voiceError =
+
+        if (
+            error.name ===
+            "AbortError"
+        ) {
+
+            const timeoutError =
+                new Error(
+                    "Voice transcription timed out."
+                );
+
+            timeoutError.code =
+                "VOICE_NETWORK_ERROR";
+
+            throw timeoutError;
+        }
+
+
+        if (
+            error.code
+        ) {
+            throw error;
+        }
+
+
+        const networkError =
             new Error(
-                error.response?.data?.error?.message ||
-                error.response?.data?.message ||
                 error.message ||
-                "Voice upload failed."
+                "Voice service is unavailable."
             );
 
-        voiceError.status = status;
-        voiceError.code =
-            status === 503
-                ? "VOICE_SERVICE_UNAVAILABLE"
-                : status
-                ? "VOICE_UPLOAD_FAILED"
-                : "VOICE_NETWORK_ERROR";
+        networkError.code =
+            "VOICE_NETWORK_ERROR";
 
-        throw voiceError;
+        throw networkError;
+
+
+    } finally {
+
+        clearTimeout(
+            timeout
+        );
+
     }
+
 }

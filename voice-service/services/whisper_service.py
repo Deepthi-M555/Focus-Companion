@@ -3,7 +3,13 @@ from faster_whisper import WhisperModel
 from dotenv import load_dotenv
 
 load_dotenv()
-MODEL_NAME=os.getenv("WHISPER_MODEL","small.en")
+MODEL_NAME = os.getenv(
+    "WHISPER_MODEL_PATH",
+    os.getenv(
+        "WHISPER_MODEL",
+        "small.en"
+    )
+)
 DEVICE=os.getenv("WHISPER_DEVICE","cpu")
 COMPUTE_TYPE=os.getenv("WHISPER_COMPUTE_TYPE","int8")
 
