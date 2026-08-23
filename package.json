@@ -5,6 +5,7 @@
   "main": "electron/main.js",
   "homepage": "./",
   "scripts": {
+    "dist": "npm run build:client && electron-builder --win nsis",
     "dev": "npm run build:client && electron . --dev",
     "build:client": "cd client && npm run build && cd ..",
     "build:app": "npm run build:client && electron-builder",
@@ -15,19 +16,26 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "build": {
-    "appId": "com.companion.app",
+    "appId": "com.fynix.productivity",
     "productName": "FYNIX",
+    
     "directories": {
-      "buildResources": "assets",
-      "output": "dist"
+      "output": "release",
+      "buildResources": "build"
     },
     "files": [
       "electron/**/*",
       "client/dist/**/*",
-      "node_modules/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "voice-service/dist/fynix-voice",
+        "to": "voice-service"
+      }
+    ],
     "win": {
+      "icon": "assets/icon.png",
       "target": [
         {
           "target": "nsis",
@@ -76,6 +84,6 @@
   },
   "devDependencies": {
     "electron": "^42.1.0",
-    "electron-builder": "^24.9.1"
+    "electron-builder": "^24.13.3"
   }
 }
