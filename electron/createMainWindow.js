@@ -50,9 +50,7 @@ function createMainWindow() {
 
             icon: path.join(
                 __dirname,
-                "..",
-                "assets",
-                "icon.ico"
+                "../assets/icon.png"
             ),
 
             webPreferences: {
