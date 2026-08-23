@@ -71,3 +71,5 @@ server/uploads/
 .env
 .env.*
 !.env.example
+
+voice-service/models/
