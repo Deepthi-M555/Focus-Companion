@@ -16,7 +16,7 @@ function applyProductionCSP() {
                 "img-src 'self' data: blob: https://images.unsplash.com; " +
                 "font-src 'self' data:; " +
                 "media-src 'self' blob:; " +
-                "connect-src 'self' https: wss: http://localhost:5000 ws://localhost:5000 http://127.0.0.1:8000; " +
+                "connect-src 'self' https://fynix-server.onrender.com wss://fynix-server.onrender.com http://127.0.0.1:8001 ws://127.0.0.1:8001; "
                 "object-src 'none'; " +
                 "base-uri 'self'; " +
                 "frame-ancestors 'none';";
@@ -47,6 +47,13 @@ function createMainWindow() {
             width: 1400,
 
             height: 900,
+
+            icon: path.join(
+                __dirname,
+                "..",
+                "assets",
+                "icon.ico"
+            ),
 
             webPreferences: {
 

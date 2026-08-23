@@ -6,7 +6,7 @@ const {
 contextBridge.exposeInMainWorld(
     "electronAPI",
     {
-
+        isElectron: true,
         startFocusSession: () =>
             ipcRenderer.invoke(
                 "start-focus-session"

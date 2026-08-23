@@ -5,6 +5,12 @@ const {
     systemPreferences
 } = require("electron");
 
+if (process.platform === "win32") {
+    app.setAppUserModelId(
+        "com.fynix.productivity"
+    );
+}
+
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -27,6 +33,14 @@ const registerPermissionsIPC =
 
 const registerNotificationIPC =
     require("./ipc/notificationIPC");
+
+const {
+    startWhisper,
+    stopWhisper,
+    waitForWhisper
+} = require(
+    "./whisperService"
+);
 
 // Set development environment if --dev flag is passed
 if (process.argv.includes("--dev")) {
@@ -327,12 +341,45 @@ ipcMain.handle("tts:speak", async (_, text) => {
 app.on(
     "before-quit",
     () => {
-        app.isQuitting = true;
+
+        app.isQuitting =
+            true;
+
         stopNativeTts();
+
+        stopWhisper();
+
     }
 );
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+
+    console.log(
+        "[WHISPER] Starting local voice service..."
+    );
+
+    startWhisper();
+
+    const whisperReady =
+        await waitForWhisper();
+
+    if (
+        whisperReady
+    ) {
+
+        console.log(
+            "[WHISPER] Local voice service ready."
+        );
+
+    } else {
+
+        console.warn(
+            "[WHISPER] Local voice service did not become ready."
+        );
+
+    }
+
+
     mainWindow =
         createTrackedMainWindow();
 
