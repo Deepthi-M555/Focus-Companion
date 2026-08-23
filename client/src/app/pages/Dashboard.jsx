@@ -64,6 +64,7 @@ export function Dashboard() {
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isSending, setIsSending] = useState(false);const [showActiveSessionModal, setShowActiveSessionModal] = useState(false);
+  const sendInFlightRef = useRef(false);
   const [pendingPrompt, setPendingPrompt] = useState("");
   const [activeSession, setActiveSession] = useState(null);
   const [todayTasks, setTodayTasks] = useState([]);
@@ -112,80 +113,315 @@ export function Dashboard() {
     }
   }, [location]);
 
- const generateSchedule = async (userMessage) => {
-   if (!userMessage.trim() || isSending) return;
-    setMessages(prev => [
-        ...prev,
-        {
-            role: "user",
-            text: userMessage
-        }
-    ]);
-    setInputValue("");
-    setIsSending(true);
-    try {
-        const response = await chat(userMessage);
-        const generatedTasks = response.data?.tasks || [];
-        localStorage.removeItem(getScopedStorageKey("pendingSchedule"));
-        if (generatedTasks.length) {
-            localStorage.setItem(
-                getScopedStorageKey("pendingSchedule"),
-                JSON.stringify(generatedTasks)
-            );
-        }
+ const generateSchedule =
+    async (
+        userMessage,
+        alreadyLocked = false
+    ) => {
 
-        setMessages(prev => [
-            ...prev,
-            {
-                role: "ai",
-                text: generatedTasks.length
-                  ? "I've created an optimized focus schedule based on your available time and priorities. Review it before beginning your focus session."
-                  : response.message || "Your schedule is ready.",
-                hasSchedule: generatedTasks.length > 0,
-                scheduleTasks: generatedTasks
-            }
-        ]);
-    }
-    catch (error) {
-        const message = error.response?.data?.message ||
-          "FYNIX couldn't respond. Please try again.";
-        toast.error(message);
-        setMessages(prev => [
-          ...prev,
-          { role: "ai", text: message, isError: true }
-        ]);
-    } finally {
-        setIsSending(false);
-    }
-  };
+        const message =
+            userMessage.trim();
 
-  const handleSend = async () => {
-    if (!inputValue.trim() || isSending) {
-        return;
-    }
-    try {
-        const active = await resumeSession();
-        console.log(active);
-        if (active?.session) {
-            if (active.session.status === "recovery") {
-                navigate("/recovery");
-                return;
-            }
-
-            setActiveSession(active.session);
-            setPendingPrompt(inputValue);
-            setShowActiveSessionModal(true);
+        if (!message) {
             return;
         }
-    }
-    catch {
-        // No active session
-        // Continue normally.
-    }
-    generateSchedule(
-        inputValue
-    );
-  };
+
+
+        /*
+         * Prevent duplicate requests.
+         *
+         * This ref closes the small race
+         * between clicking Send and the
+         * first async operation completing.
+         */
+
+        if (
+            !alreadyLocked &&
+            sendInFlightRef.current
+        ) {
+            return;
+        }
+
+
+        const ownsLock =
+            !alreadyLocked;
+
+        if (ownsLock) {
+
+            sendInFlightRef.current =
+                true;
+
+            setIsSending(
+                true
+            );
+
+        }
+
+
+        setMessages(
+            prev => [
+                ...prev,
+
+                {
+                    role:
+                        "user",
+
+                    text:
+                        message
+                }
+            ]
+        );
+
+
+        setInputValue("");
+
+
+        try {
+
+            const response =
+                await chat(
+                    message
+                );
+
+
+            const generatedTasks =
+                response.data?.tasks ||
+                [];
+
+
+            localStorage.removeItem(
+                getScopedStorageKey(
+                    "pendingSchedule"
+                )
+            );
+
+
+            if (
+                generatedTasks.length
+            ) {
+
+                localStorage.setItem(
+
+                    getScopedStorageKey(
+                        "pendingSchedule"
+                    ),
+
+                    JSON.stringify(
+                        generatedTasks
+                    )
+
+                );
+
+            }
+
+
+            setMessages(
+                prev => [
+                    ...prev,
+
+                    {
+                        role:
+                            "ai",
+
+                        text:
+                            generatedTasks.length
+                                ? "I've created an optimized focus schedule based on your available time and priorities. Review it before beginning your focus session."
+                                : response.message ||
+                                  "Your schedule is ready.",
+
+                        hasSchedule:
+                            generatedTasks.length >
+                            0,
+
+                        scheduleTasks:
+                            generatedTasks
+                    }
+
+                ]
+            );
+
+
+        } catch (
+            error
+        ) {
+
+            const message =
+                error.response?.data?.message ||
+                "FYNIX couldn't respond. Please try again.";
+
+
+            toast.error(
+                message
+            );
+
+
+            setMessages(
+                prev => [
+                    ...prev,
+
+                    {
+                        role:
+                            "ai",
+
+                        text:
+                            message,
+
+                        isError:
+                            true
+                    }
+                ]
+            );
+
+
+        } finally {
+
+            if (ownsLock) {
+
+                sendInFlightRef.current =
+                    false;
+
+                setIsSending(
+                    false
+                );
+
+            }
+
+        }
+
+    };
+
+  const handleSend =
+    async () => {
+
+        const message =
+            inputValue.trim();
+
+
+        if (
+            !message ||
+            isSending ||
+            sendInFlightRef.current
+        ) {
+
+            return;
+
+        }
+
+
+        /*
+         * LOCK IMMEDIATELY.
+         *
+         * This is the important fix.
+         *
+         * We lock BEFORE resumeSession()
+         * because that call is asynchronous.
+         */
+
+        sendInFlightRef.current =
+            true;
+
+        setIsSending(
+            true
+        );
+
+
+        try {
+
+            const active =
+                await resumeSession();
+
+
+            console.log(
+                "[Dashboard] Active session:",
+                active
+            );
+
+
+            if (
+                active?.session
+            ) {
+
+                if (
+                    active.session.status ===
+                    "recovery"
+                ) {
+
+                    navigate(
+                        "/recovery"
+                    );
+
+                    return;
+
+                }
+
+
+                setActiveSession(
+                    active.session
+                );
+
+
+                setPendingPrompt(
+                    message
+                );
+
+
+                setShowActiveSessionModal(
+                    true
+                );
+
+
+                return;
+
+            }
+
+
+            /*
+             * generateSchedule already has
+             * our lock, so tell it that the
+             * lock already exists.
+             */
+
+            await generateSchedule(
+                message,
+                true
+            );
+
+
+        } catch {
+
+            /*
+             * No active session.
+             *
+             * Generate the schedule normally.
+             */
+
+            await generateSchedule(
+                message,
+                true
+            );
+
+
+        } finally {
+
+            /*
+             * If an active-session modal
+             * was opened, this request is
+             * no longer in flight.
+             *
+             * Release the lock here.
+             */
+
+            sendInFlightRef.current =
+                false;
+
+            setIsSending(
+                false
+            );
+
+        }
+
+    };
+    
   const handleResumeSession = () => {
     setShowActiveSessionModal(false);
     navigate("/focus");
